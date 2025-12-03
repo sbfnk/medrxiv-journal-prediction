@@ -10,9 +10,11 @@ all_doi.csv
 
 # Generated data
 labeled_data.json
-labeled_progress.jsonl
+labeled_*.json
+labeled_*_progress.jsonl
 test_labeled.json
 test_progress.jsonl
+doi_to_xml.json
 embeddings/
 *.npy
 *.pkl
