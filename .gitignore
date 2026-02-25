@@ -17,8 +17,10 @@ test_progress.jsonl
 doi_to_xml.json
 embeddings/
 *.npy
+*.npz
 *.pkl
 *.parquet
+knn_results.json
 
 # Python
 __pycache__/
