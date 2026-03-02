@@ -177,6 +177,25 @@ def analyse_tiers(predictions, true_journals, train_journals_list):
     return tier_results
 
 
+def filter_by_min_papers(predictions, test_journals, train_journals, min_papers):
+    """Filter test set to only journals with >= min_papers training examples.
+
+    Returns filtered predictions, filtered test journals, and the number of
+    eligible journals.
+    """
+    train_counts = Counter(train_journals)
+    eligible = {j for j, c in train_counts.items() if c >= min_papers}
+
+    filtered_preds = []
+    filtered_journals = []
+    for pred, true_j in zip(predictions, test_journals):
+        if true_j in eligible:
+            filtered_preds.append(pred)
+            filtered_journals.append(true_j)
+
+    return filtered_preds, filtered_journals, len(eligible)
+
+
 def analyse_confusions(predictions, true_journals, top_n=20):
     """Find top confusion pairs: which journals get mixed up most often."""
     confusion_counts = Counter()
@@ -197,6 +216,8 @@ def main():
     parser.add_argument("--test-size", type=float, default=0.2, help="Test set fraction")
     parser.add_argument("--output", default="knn_results.json", help="Results output file")
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
+    parser.add_argument("--min-papers", type=int, default=0,
+                        help="Only evaluate journals with >= N training papers (default: 0 = all)")
     args = parser.parse_args()
 
     emb_dir = Path(args.embeddings_dir)
@@ -225,6 +246,14 @@ def main():
     print(f"Computing cosine similarity + kNN (k={args.k})...", file=sys.stderr)
     sim_matrix = cosine_similarity_chunked(test_emb, train_emb)
     predictions = predict_knn(sim_matrix, train_journals, k=args.k)
+
+    # Optionally filter by minimum training papers
+    if args.min_papers > 0:
+        predictions, test_journals, n_eligible = filter_by_min_papers(
+            predictions, test_journals, train_journals, args.min_papers)
+        print(f"\n--min-papers={args.min_papers}: {n_eligible} eligible journals, "
+              f"{len(predictions)} test papers retained "
+              f"(excluded {len(test_idx) - len(predictions)})", file=sys.stderr)
 
     # Evaluate
     print("\nOverall results:", file=sys.stderr)
@@ -257,8 +286,10 @@ def main():
             "k": args.k,
             "test_size": args.test_size,
             "seed": args.seed,
+            "min_papers": args.min_papers,
             "n_train": len(train_idx),
             "n_test": len(test_idx),
+            "n_test_after_filter": len(predictions),
             "n_train_journals": n_train_journals,
             "n_test_journals": n_test_journals,
         },
