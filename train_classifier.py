@@ -29,6 +29,7 @@ from evaluate_knn import (
     evaluate,
     analyse_tiers,
     analyse_confusions,
+    filter_by_min_papers,
 )
 
 
@@ -94,6 +95,8 @@ def main():
                         help="Results output file")
     parser.add_argument("--max-iter", type=int, default=200,
                         help="Maximum iterations for solver (default: 200)")
+    parser.add_argument("--min-papers", type=int, default=0,
+                        help="Only evaluate journals with >= N training papers (default: 0 = all)")
     args = parser.parse_args()
 
     emb_dir = Path(args.embeddings_dir)
@@ -180,6 +183,14 @@ def main():
     # Convert to ranked predictions
     predictions = proba_to_ranked_predictions(proba, classes)
 
+    # Optionally filter by minimum training papers
+    if args.min_papers > 0:
+        predictions, test_journals, n_eligible = filter_by_min_papers(
+            predictions, test_journals, train_journals, args.min_papers)
+        print(f"\n--min-papers={args.min_papers}: {n_eligible} eligible journals, "
+              f"{len(predictions)} test papers retained "
+              f"(excluded {len(test_idx) - len(predictions)})", file=sys.stderr)
+
     # Evaluate
     print("\nOverall results:", file=sys.stderr)
     overall = evaluate(predictions, test_journals)
@@ -215,10 +226,12 @@ def main():
             "max_iter": args.max_iter,
             "test_size": args.test_size,
             "seed": args.seed,
+            "min_papers": args.min_papers,
             "embeddings_dir": str(emb_dir),
             "n_features": X_train.shape[1],
             "n_train": len(train_idx),
             "n_test": len(test_idx),
+            "n_test_after_filter": len(predictions),
             "n_train_journals": n_train_journals,
             "n_test_journals": n_test_journals,
             "n_categories": len(unique_cats),
