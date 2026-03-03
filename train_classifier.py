@@ -26,6 +26,7 @@ from sklearn.preprocessing import LabelEncoder
 from evaluate_knn import (
     load_embeddings,
     stratified_split,
+    stratified_split_3way,
     evaluate,
     analyse_tiers,
     analyse_confusions,
@@ -97,6 +98,8 @@ def main():
                         help="Maximum iterations for solver (default: 200)")
     parser.add_argument("--min-papers", type=int, default=0,
                         help="Only evaluate journals with >= N training papers (default: 0 = all)")
+    parser.add_argument("--val-size", type=float, default=0.0,
+                        help="Validation set fraction (default: 0.0 = no validation)")
     args = parser.parse_args()
 
     emb_dir = Path(args.embeddings_dir)
@@ -110,11 +113,21 @@ def main():
     print(f"Loaded {embeddings.shape[0]} embeddings ({embeddings.shape[1]}-dim)",
           file=sys.stderr)
 
-    # Split (identical to kNN)
-    print("Splitting train/test...", file=sys.stderr)
-    train_idx, test_idx = stratified_split(
-        journals, test_size=args.test_size, seed=args.seed)
-    print(f"Train: {len(train_idx)}, Test: {len(test_idx)}", file=sys.stderr)
+    # Split
+    use_val = args.val_size > 0
+    if use_val:
+        print("Splitting train/val/test...", file=sys.stderr)
+        train_idx, val_idx, test_idx = stratified_split_3way(
+            journals, val_size=args.val_size, test_size=args.test_size,
+            seed=args.seed)
+        print(f"Train: {len(train_idx)}, Val: {len(val_idx)}, "
+              f"Test: {len(test_idx)}", file=sys.stderr)
+    else:
+        print("Splitting train/test...", file=sys.stderr)
+        train_idx, test_idx = stratified_split(
+            journals, test_size=args.test_size, seed=args.seed)
+        val_idx = np.array([], dtype=int)
+        print(f"Train: {len(train_idx)}, Test: {len(test_idx)}", file=sys.stderr)
 
     train_emb = embeddings[train_idx]
     test_emb = embeddings[test_idx]
@@ -122,6 +135,11 @@ def main():
     test_journals = [journals[i] for i in test_idx]
     train_categories = [categories[i] for i in train_idx]
     test_categories = [categories[i] for i in test_idx]
+
+    if use_val:
+        val_emb = embeddings[val_idx]
+        val_journals = [journals[i] for i in val_idx]
+        val_categories = [categories[i] for i in val_idx]
 
     n_train_journals = len(set(train_journals))
     n_test_journals = len(set(test_journals))
@@ -183,6 +201,14 @@ def main():
     # Convert to ranked predictions
     predictions = proba_to_ranked_predictions(proba, classes)
 
+    # Val set predictions
+    val_overall = None
+    if use_val:
+        X_val = build_feature_matrix(
+            val_emb, val_categories, cat_to_idx, use_category)
+        proba_val = clf.predict_proba(X_val)
+        val_predictions = proba_to_ranked_predictions(proba_val, classes)
+
     # Optionally filter by minimum training papers
     if args.min_papers > 0:
         predictions, test_journals, n_eligible = filter_by_min_papers(
@@ -191,8 +217,21 @@ def main():
               f"{len(predictions)} test papers retained "
               f"(excluded {len(test_idx) - len(predictions)})", file=sys.stderr)
 
-    # Evaluate
-    print("\nOverall results:", file=sys.stderr)
+        if use_val:
+            val_predictions, val_journals, _ = filter_by_min_papers(
+                val_predictions, val_journals, train_journals, args.min_papers)
+
+    # Evaluate on val set
+    if use_val:
+        print("\nValidation set results:", file=sys.stderr)
+        val_overall = evaluate(val_predictions, val_journals)
+        for metric, value in val_overall.items():
+            if metric != "n_test":
+                print(f"  {metric}: {value:.4f}", file=sys.stderr)
+        print(f"  n_val: {val_overall['n_test']}", file=sys.stderr)
+
+    # Evaluate on test set
+    print("\nOverall results (test set):", file=sys.stderr)
     overall = evaluate(predictions, test_journals)
     for metric, value in overall.items():
         if metric != "n_test":
@@ -224,12 +263,14 @@ def main():
                          else "embeddings"),
             "C": args.C,
             "max_iter": args.max_iter,
+            "val_size": args.val_size,
             "test_size": args.test_size,
             "seed": args.seed,
             "min_papers": args.min_papers,
             "embeddings_dir": str(emb_dir),
             "n_features": X_train.shape[1],
             "n_train": len(train_idx),
+            "n_val": len(val_idx) if use_val else 0,
             "n_test": len(test_idx),
             "n_test_after_filter": len(predictions),
             "n_train_journals": n_train_journals,
@@ -244,6 +285,9 @@ def main():
             for (t, p), c in confusions
         ],
     }
+
+    if val_overall is not None:
+        results["validation"] = val_overall
 
     with open(args.output, "w") as f:
         json.dump(results, f, indent=2)

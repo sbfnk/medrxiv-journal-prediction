@@ -26,6 +26,7 @@ from sklearn.preprocessing import LabelEncoder
 from evaluate_knn import (
     load_embeddings,
     stratified_split,
+    stratified_split_3way,
     cosine_similarity_chunked,
     predict_knn,
     evaluate,
@@ -118,9 +119,6 @@ def score_interpolation(knn_preds, clf_preds, alpha):
 def grid_search_alpha(knn_preds, clf_preds, true_journals, metric="mrr"):
     """Sweep alpha from 0.0 to 1.0 in 0.1 steps, return best alpha and grid.
 
-    Note: this is tuned on the test set, so results are optimistic. A proper
-    evaluation would use a held-out validation set.
-
     Returns:
         (best_alpha, grid_results) where grid_results is a dict mapping
         alpha -> {metric: value, ...}.
@@ -166,6 +164,8 @@ def main():
                         help="Only evaluate journals with >= N training papers (default: 0 = all)")
     parser.add_argument("--test-size", type=float, default=0.2,
                         help="Test set fraction")
+    parser.add_argument("--val-size", type=float, default=0.1,
+                        help="Validation set fraction for alpha tuning (default: 0.1)")
     parser.add_argument("--seed", type=int, default=42,
                         help="Random seed")
     parser.add_argument("--output", default="ensemble_results.json",
@@ -183,11 +183,21 @@ def main():
     print(f"Loaded {embeddings.shape[0]} embeddings ({embeddings.shape[1]}-dim)",
           file=sys.stderr)
 
-    # Split (identical to kNN and classifier)
-    print("Splitting train/test...", file=sys.stderr)
-    train_idx, test_idx = stratified_split(
-        journals, test_size=args.test_size, seed=args.seed)
-    print(f"Train: {len(train_idx)}, Test: {len(test_idx)}", file=sys.stderr)
+    # Split
+    use_val = args.val_size > 0
+    if use_val:
+        print("Splitting train/val/test...", file=sys.stderr)
+        train_idx, val_idx, test_idx = stratified_split_3way(
+            journals, val_size=args.val_size, test_size=args.test_size,
+            seed=args.seed)
+        print(f"Train: {len(train_idx)}, Val: {len(val_idx)}, "
+              f"Test: {len(test_idx)}", file=sys.stderr)
+    else:
+        print("Splitting train/test...", file=sys.stderr)
+        train_idx, test_idx = stratified_split(
+            journals, test_size=args.test_size, seed=args.seed)
+        val_idx = np.array([], dtype=int)
+        print(f"Train: {len(train_idx)}, Test: {len(test_idx)}", file=sys.stderr)
 
     train_emb = embeddings[train_idx]
     test_emb = embeddings[test_idx]
@@ -195,6 +205,11 @@ def main():
     test_journals = [journals[i] for i in test_idx]
     train_categories = [categories[i] for i in train_idx]
     test_categories = [categories[i] for i in test_idx]
+
+    if use_val:
+        val_emb = embeddings[val_idx]
+        val_journals = [journals[i] for i in val_idx]
+        val_categories = [categories[i] for i in val_idx]
 
     n_train_journals = len(set(train_journals))
     n_test_journals = len(set(test_journals))
@@ -208,6 +223,10 @@ def main():
     knn_preds = predict_knn(sim_matrix, train_journals, k=args.k)
     knn_time = time.time() - t0
     print(f"kNN completed in {knn_time:.1f}s", file=sys.stderr)
+
+    if use_val:
+        val_sim_matrix = cosine_similarity_chunked(val_emb, train_emb)
+        knn_preds_val = predict_knn(val_sim_matrix, train_journals, k=args.k)
 
     # --- Classifier ---
     print(f"\nTraining logistic regression (C={args.classifier_C})...",
@@ -240,6 +259,12 @@ def main():
     classes = label_encoder.classes_
     clf_preds = proba_to_ranked_predictions(proba, classes)
 
+    if use_val:
+        X_val = build_feature_matrix(
+            val_emb, val_categories, cat_to_idx, use_category)
+        proba_val = clf.predict_proba(X_val)
+        clf_preds_val = proba_to_ranked_predictions(proba_val, classes)
+
     # --- Optionally filter by min-papers ---
     if args.min_papers > 0:
         knn_preds, test_journals_knn, n_eligible = filter_by_min_papers(
@@ -252,6 +277,14 @@ def main():
         print(f"\n--min-papers={args.min_papers}: {n_eligible} eligible journals, "
               f"{len(test_journals)} test papers retained "
               f"(excluded {len(test_idx) - len(test_journals)})", file=sys.stderr)
+
+        if use_val:
+            knn_preds_val, val_journals_knn, _ = filter_by_min_papers(
+                knn_preds_val, val_journals, train_journals, args.min_papers)
+            clf_preds_val, val_journals_clf, _ = filter_by_min_papers(
+                clf_preds_val, val_journals, train_journals, args.min_papers)
+            assert val_journals_knn == val_journals_clf
+            val_journals = val_journals_knn
 
     # --- Evaluate individual methods ---
     print("\n=== kNN-only results ===", file=sys.stderr)
@@ -292,22 +325,48 @@ def main():
                 if metric != "n_test":
                     print(f"  {metric}: {value:.4f}", file=sys.stderr)
         else:
-            print("\n=== Interpolation (grid search) ===", file=sys.stderr)
-            best_alpha, interp_grid = grid_search_alpha(
-                knn_preds, clf_preds, test_journals)
-            interp_results = interp_grid[f"{best_alpha:.1f}"]
-            print(f"  Best alpha: {best_alpha:.1f} (tuned on test set — optimistic)",
-                  file=sys.stderr)
-            for metric, value in interp_results.items():
-                if metric != "n_test":
-                    print(f"  {metric}: {value:.4f}", file=sys.stderr)
+            if use_val:
+                # Tune alpha on validation set, evaluate on test set
+                print("\n=== Interpolation (grid search on val set) ===",
+                      file=sys.stderr)
+                best_alpha, interp_grid = grid_search_alpha(
+                    knn_preds_val, clf_preds_val, val_journals)
+                print(f"  Best alpha: {best_alpha:.1f} (tuned on val set)",
+                      file=sys.stderr)
 
-            print("\n  Alpha grid:", file=sys.stderr)
-            for alpha_str, res in sorted(interp_grid.items()):
-                print(f"    alpha={alpha_str}: "
-                      f"acc@1={res['accuracy@1']:.4f}  "
-                      f"acc@10={res['accuracy@10']:.4f}  "
-                      f"mrr={res['mrr']:.4f}", file=sys.stderr)
+                print("\n  Alpha grid (val set):", file=sys.stderr)
+                for alpha_str, res in sorted(interp_grid.items()):
+                    print(f"    alpha={alpha_str}: "
+                          f"acc@1={res['accuracy@1']:.4f}  "
+                          f"acc@10={res['accuracy@10']:.4f}  "
+                          f"mrr={res['mrr']:.4f}", file=sys.stderr)
+
+                # Final evaluation on test set with best alpha
+                print(f"\n=== Test set results (alpha={best_alpha:.1f}) ===",
+                      file=sys.stderr)
+                interp_preds = score_interpolation(
+                    knn_preds, clf_preds, best_alpha)
+                interp_results = evaluate(interp_preds, test_journals)
+                for metric, value in interp_results.items():
+                    if metric != "n_test":
+                        print(f"  {metric}: {value:.4f}", file=sys.stderr)
+            else:
+                print("\n=== Interpolation (grid search) ===", file=sys.stderr)
+                best_alpha, interp_grid = grid_search_alpha(
+                    knn_preds, clf_preds, test_journals)
+                interp_results = interp_grid[f"{best_alpha:.1f}"]
+                print(f"  Best alpha: {best_alpha:.1f} "
+                      f"(tuned on test set — optimistic)", file=sys.stderr)
+                for metric, value in interp_results.items():
+                    if metric != "n_test":
+                        print(f"  {metric}: {value:.4f}", file=sys.stderr)
+
+                print("\n  Alpha grid:", file=sys.stderr)
+                for alpha_str, res in sorted(interp_grid.items()):
+                    print(f"    alpha={alpha_str}: "
+                          f"acc@1={res['accuracy@1']:.4f}  "
+                          f"acc@10={res['accuracy@10']:.4f}  "
+                          f"mrr={res['mrr']:.4f}", file=sys.stderr)
 
     # --- Per-tier breakdown for best ensemble ---
     best_ensemble_preds = None
@@ -352,9 +411,11 @@ def main():
             "classifier_max_iter": args.classifier_max_iter,
             "use_category": use_category,
             "min_papers": args.min_papers,
+            "val_size": args.val_size,
             "test_size": args.test_size,
             "seed": args.seed,
             "n_train": len(train_idx),
+            "n_val": len(val_idx) if use_val else 0,
             "n_test": len(test_idx),
             "n_test_after_filter": len(test_journals),
             "n_train_journals": n_train_journals,
@@ -375,10 +436,13 @@ def main():
         }
         if interp_grid:
             results["interpolation"]["grid"] = interp_grid
-            results["interpolation"]["caveat"] = (
-                "Alpha tuned on test set — results are optimistic. "
-                "Use a validation set for unbiased estimates."
-            )
+            if use_val:
+                results["interpolation"]["tuned_on"] = "validation set"
+            else:
+                results["interpolation"]["caveat"] = (
+                    "Alpha tuned on test set — results are optimistic. "
+                    "Use --val-size for unbiased estimates."
+                )
 
     if best_ensemble_preds:
         results["best_ensemble"] = {
