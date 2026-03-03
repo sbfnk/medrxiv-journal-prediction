@@ -197,7 +197,7 @@ def save_checkpoint(output_dir, model, optimiser, scheduler, epoch, step,
     }, ckpt_path)
 
     # Save adapter weights separately
-    model.save_adapter(str(ckpt_dir / "adapter"), "allenai/specter2")
+    model.save_adapter(str(ckpt_dir / "adapter"), "[PRX]")
     print(f"  Checkpoint saved at epoch {epoch}, step {step}", file=sys.stderr)
 
 
@@ -231,7 +231,7 @@ def regenerate_embeddings(records, tokenizer, model, device, output_dir,
     Uses the same chunk + mean-pool approach as generate_embeddings.py but
     with the fine-tuned adapter weights.
     """
-    from generate_embeddings import generate_fulltext_embeddings
+    from generate_embeddings import generate_fulltext_embeddings, _load_checkpoint
 
     print("\nRegenerating embeddings with fine-tuned model...", file=sys.stderr)
     model.eval()
@@ -239,12 +239,23 @@ def regenerate_embeddings(records, tokenizer, model, device, output_dir,
     emb_dir = Path(output_dir) / "embeddings"
     emb_dir.mkdir(parents=True, exist_ok=True)
 
+    # Resume from checkpoint if available
+    start_idx = 0
+    existing_embeddings = None
+    ckpt = _load_checkpoint(emb_dir)
+    if ckpt is not None:
+        existing_embeddings, start_idx = ckpt
+        print(f"Resuming embedding generation from record {start_idx}",
+              file=sys.stderr)
+
     emb = generate_fulltext_embeddings(
         records, tokenizer, model, device,
         batch_size=batch_size,
         stride=stride,
         checkpoint_dir=emb_dir,
         checkpoint_every=1000,
+        start_idx=start_idx,
+        existing_embeddings=existing_embeddings,
     )
 
     # Save in same format as generate_embeddings.py
@@ -352,7 +363,7 @@ def main():
     tokenizer, model = load_specter2(device)
 
     # Freeze base model, train only adapter
-    model.train_adapter("allenai/specter2")
+    model.train_adapter("[PRX]")
     n_trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
     n_total = sum(p.numel() for p in model.parameters())
     print(f"Trainable parameters: {n_trainable:,} / {n_total:,} "
@@ -461,7 +472,7 @@ def main():
             # Save best adapter
             best_dir = output_dir / "best_adapter"
             best_dir.mkdir(parents=True, exist_ok=True)
-            model.save_adapter(str(best_dir), "allenai/specter2")
+            model.save_adapter(str(best_dir), "[PRX]")
             print(f"  New best model saved (loss={best_loss:.4f})", file=sys.stderr)
 
         # End-of-epoch checkpoint
