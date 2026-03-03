@@ -67,6 +67,52 @@ def stratified_split(journals, test_size=0.2, seed=42):
     return np.array(train_idx), np.array(test_idx)
 
 
+def stratified_split_3way(journals, val_size=0.1, test_size=0.2, seed=42):
+    """Stratified train/val/test split for hyperparameter tuning.
+
+    Split logic per journal:
+    - 1 paper (singleton) → train only
+    - 2 papers → 1 train, 1 test (no val — too few to split 3 ways)
+    - ≥3 papers → proportional split with max(1, ...) for val and test
+    """
+    rng = np.random.default_rng(seed)
+    journal_counts = Counter(journals)
+
+    train_idx = []
+    val_idx = []
+    test_idx = []
+
+    journal_indices = defaultdict(list)
+    for i, j in enumerate(journals):
+        journal_indices[j].append(i)
+
+    for journal, indices in journal_indices.items():
+        indices = np.array(indices)
+        rng.shuffle(indices)
+        n = journal_counts[journal]
+
+        if n == 1:
+            train_idx.extend(indices)
+        elif n == 2:
+            test_idx.append(indices[0])
+            train_idx.append(indices[1])
+        else:
+            n_test = max(1, int(len(indices) * test_size))
+            n_val = max(1, int(len(indices) * val_size))
+            # Leave at least 1 for training — trim val first, then test
+            excess = (n_test + n_val) - (n - 1)
+            if excess > 0:
+                trim_val = min(excess, n_val - 1)
+                n_val -= trim_val
+                excess -= trim_val
+                n_test = max(1, n_test - excess)
+            test_idx.extend(indices[:n_test])
+            val_idx.extend(indices[n_test:n_test + n_val])
+            train_idx.extend(indices[n_test + n_val:])
+
+    return np.array(train_idx), np.array(val_idx), np.array(test_idx)
+
+
 def cosine_similarity_chunked(test_emb, train_emb, chunk_size=500):
     """Compute cosine similarity in chunks to limit memory usage."""
     # Normalise vectors
@@ -218,6 +264,8 @@ def main():
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
     parser.add_argument("--min-papers", type=int, default=0,
                         help="Only evaluate journals with >= N training papers (default: 0 = all)")
+    parser.add_argument("--val-size", type=float, default=0.0,
+                        help="Validation set fraction (default: 0.0 = no validation, 2-way split)")
     args = parser.parse_args()
 
     emb_dir = Path(args.embeddings_dir)
@@ -229,9 +277,17 @@ def main():
     print(f"Loaded {embeddings.shape[0]} embeddings ({embeddings.shape[1]}-dim)", file=sys.stderr)
 
     # Split
-    print("Splitting train/test...", file=sys.stderr)
-    train_idx, test_idx = stratified_split(journals, test_size=args.test_size, seed=args.seed)
-    print(f"Train: {len(train_idx)}, Test: {len(test_idx)}", file=sys.stderr)
+    if args.val_size > 0:
+        print("Splitting train/val/test...", file=sys.stderr)
+        train_idx, val_idx, test_idx = stratified_split_3way(
+            journals, val_size=args.val_size, test_size=args.test_size, seed=args.seed)
+        print(f"Train: {len(train_idx)}, Val: {len(val_idx)}, Test: {len(test_idx)}",
+              file=sys.stderr)
+    else:
+        print("Splitting train/test...", file=sys.stderr)
+        train_idx, test_idx = stratified_split(journals, test_size=args.test_size, seed=args.seed)
+        val_idx = np.array([], dtype=int)
+        print(f"Train: {len(train_idx)}, Test: {len(test_idx)}", file=sys.stderr)
 
     train_emb = embeddings[train_idx]
     test_emb = embeddings[test_idx]
@@ -284,10 +340,12 @@ def main():
     results = {
         "config": {
             "k": args.k,
+            "val_size": args.val_size,
             "test_size": args.test_size,
             "seed": args.seed,
             "min_papers": args.min_papers,
             "n_train": len(train_idx),
+            "n_val": len(val_idx) if args.val_size > 0 else 0,
             "n_test": len(test_idx),
             "n_test_after_filter": len(predictions),
             "n_train_journals": n_train_journals,

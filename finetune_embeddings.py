@@ -36,7 +36,7 @@ from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
 
 from generate_embeddings import load_dataset, select_device
-from evaluate_knn import stratified_split
+from evaluate_knn import stratified_split, stratified_split_3way
 
 
 SBATCH_TEMPLATE = """\
@@ -316,6 +316,8 @@ def main():
                         help="Random seed")
     parser.add_argument("--test-size", type=float, default=0.2,
                         help="Test set fraction (for split consistency)")
+    parser.add_argument("--val-size", type=float, default=0.1,
+                        help="Validation set fraction (default: 0.1, excluded from training)")
     parser.add_argument("--print-sbatch", action="store_true",
                         help="Print SLURM sbatch template and exit")
     parser.add_argument("--skip-regen", action="store_true",
@@ -342,9 +344,18 @@ def main():
     print(f"Loaded {len(records)} records", file=sys.stderr)
 
     # Split (same as evaluation scripts)
-    train_idx, test_idx = stratified_split(
-        journals, test_size=args.test_size, seed=args.seed)
-    print(f"Train: {len(train_idx)}, Test: {len(test_idx)}", file=sys.stderr)
+    if args.val_size > 0:
+        train_idx, _val_idx, test_idx = stratified_split_3way(
+            journals, val_size=args.val_size, test_size=args.test_size,
+            seed=args.seed)
+        n_val = len(_val_idx)
+        print(f"Train: {len(train_idx)}, Val: {n_val} (excluded), "
+              f"Test: {len(test_idx)} (excluded)", file=sys.stderr)
+    else:
+        train_idx, test_idx = stratified_split(
+            journals, test_size=args.test_size, seed=args.seed)
+        print(f"Train: {len(train_idx)}, Test: {len(test_idx)} (excluded)",
+              file=sys.stderr)
 
     # Build pair dataset
     pair_dataset = PairDataset(records, train_idx, seed=args.seed)
