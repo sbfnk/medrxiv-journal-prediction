@@ -1,52 +1,95 @@
 # MedRxiv Journal Prediction
 
-Predict which journal a medRxiv preprint will be published in based on its content.
+Predict which journal a medRxiv preprint will be published in, with calibrated probabilities.
 
-## Goal
+## What it does
 
-Build a system where users can say "show me the 20 preprints from the last 2 months that most look like Lancet articles" - reverse-engineering journal gatekeeping to democratise quality assessment.
+Given a medRxiv preprint, the system produces a ranked list of candidate journals with calibrated probability estimates. For example:
 
-## Approach
+```
+Paper: "Immunogenicity of inactivated SARS-CoV-2 vaccine..."
+  1   16.7%  Vaccine
+  2   11.4%  Vaccines
+  3    6.3%  PLOS ONE
+  4    6.3%  The Lancet Infectious Diseases  <-- actual
+```
 
-1. **Embeddings + kNN** (baseline): Embed preprints, find nearest published papers, use their journal destinations
-2. **Fine-tune small model**: If baseline insufficient, fine-tune Llama 3.1 8B or Mistral 7B
-3. **LLM API**: Only if above fail (expensive)
+It also supports the reverse direction: given a journal, find preprints predicted to match it ("journal-as-a-filter").
 
-## Data Sources
+## Results
 
-- **medRxiv preprints**: Full text XML from `s3://biorxiv-src-monthly/Current_Content/`
-- **Publication destinations**: medRxiv API `published` field links preprint DOI → published DOI
-- **Journal names**: Crossref API lookup from published DOIs
-- **Citation counts**: Crossref public data file
+Best method: fine-tuned SPECTER2 ensemble (kNN + logistic regression, score interpolation).
 
-## Data Not in Repo
+| Scope | acc@1 | acc@10 | MRR |
+|---|---|---|---|
+| All 3,645 journals | 12.7% | 43.6% | 0.225 |
+| Journals with ≥10 papers (365) | 19.2% | 61.3% | 0.328 |
 
-Large data files (~3GB compressed) stored separately:
-- `medrxiv_text.tar.bz2` - 70k preprint XMLs
-- `crossref.tar.bz2` - 167M Crossref records
-- `all_doi.tar.bz2` - DOI mappings
+Calibration (≥10-paper journals): ECE = 1.9% after temperature scaling + isotonic regression.
 
-See [DATA_ACQUISITION.md](DATA_ACQUISITION.md) for instructions on obtaining the data.
+See [RESULTS.md](RESULTS.md) for full methodology and per-tier breakdowns.
 
-## Scripts
+## Dataset
 
-- `extract_labeled_data.py` - Build labelled dataset from medRxiv + Crossref APIs
+25,182 labelled medRxiv preprints (2020–2024) across 3,645 journals.
+
+- **Preprint text**: medRxiv API + JATS XML from `s3://biorxiv-src-monthly/Current_Content/`
+- **Publication destinations**: medRxiv API `published` field
+- **Journal names**: Crossref API / Public Data File
+
+Large data files not in repo: `labeled_dataset.json` (1.3GB), embeddings (~600MB). See [DATA_ACQUISITION.md](DATA_ACQUISITION.md) for data setup.
 
 ## Usage
 
-```bash
-# Extract labelled dataset (preprints with known journal destinations)
-python3 extract_labeled_data.py --start-date 2024-01-01 --end-date 2024-06-30
+### Predict journals for a paper
 
-# Full extraction for all available data
-python3 extract_labeled_data.py --start-date 2020-01-01 --end-date 2024-12-31
+```bash
+python3 predict_journal.py --doi 10.1101/2021.12.28.21268468
+python3 predict_journal.py --interactive
+python3 predict_journal.py --all --output predictions.json
 ```
 
-## Status
+### Find preprints for a journal
 
-- [x] Data pipeline understood
-- [x] Extraction script working
-- [ ] Full dataset extraction
-- [ ] Embedding generation
-- [ ] kNN baseline evaluation
-- [ ] Fine-tuning (if needed)
+```bash
+python3 journal_filter.py "The Lancet Infectious Diseases" --top-k 20
+python3 journal_filter.py --list-journals
+python3 journal_filter.py --interactive
+```
+
+### Recommend papers
+
+```bash
+# By journals you read
+python3 recommend.py --journals "eLife" "Nature Communications"
+
+# By example papers
+python3 recommend.py --papers 10.1101/2021.05.05.21256010
+```
+
+## Scripts
+
+| Script | Purpose |
+|---|---|
+| `predict_journal.py` | Paper → ranked journals with calibrated probabilities |
+| `journal_filter.py` | Journal → ranked preprints (journal-as-a-filter) |
+| `recommend.py` | Paper recommendation (journal-based or embedding-based) |
+| `calibrate.py` | Calibration analysis (reliability diagrams, ECE, temperature scaling) |
+| `ensemble_predict.py` | Ensemble evaluation (kNN + classifier, RRF/interpolation) |
+| `evaluate_knn.py` | kNN baseline, stratified splits, metrics |
+| `train_classifier.py` | Logistic regression / MLP classifier |
+| `finetune_embeddings.py` | Contrastive fine-tuning of SPECTER2 adapter |
+| `generate_embeddings.py` | Embedding generation (SPECTER2 / nomic) |
+| `regen_finetuned.py` | Re-embed with fine-tuned adapter |
+| `extract_labeled_data.py` | Build dataset from medRxiv + Crossref |
+| `parse_xml.py` | JATS XML parser |
+
+## Method
+
+1. **Embeddings**: SPECTER2 full-text, contrastively fine-tuned for journal discrimination (adapter-only, 0.9M params, InfoNCE loss)
+2. **kNN**: k=20 cosine similarity with weighted voting
+3. **Classifier**: Multinomial logistic regression on embeddings + medRxiv category features
+4. **Ensemble**: Score interpolation (alpha=0.1 for ≥10-paper journals)
+5. **Calibration**: Temperature scaling (T=0.83) + isotonic regression, fitted on validation set
+
+Evaluation uses a 70/10/20 stratified train/val/test split (17,773 / 2,525 / 4,884 papers).
