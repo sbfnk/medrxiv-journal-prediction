@@ -11,7 +11,8 @@ all_doi.csv
 # Generated data
 labeled_data.json
 labeled_*.json
-labeled_progress*.jsonl
+labeled_*progress*.jsonl
+*_progress.jsonl
 test_labeled.json
 test_progress.jsonl
 doi_to_xml.json
