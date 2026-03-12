@@ -13,7 +13,9 @@ Usage:
 import html
 import json
 import argparse
+import os
 import re
+import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -170,15 +172,12 @@ def journal_view(name):
         abort(404)
 
     days = request.args.get("days", type=int, default=None)
-    top_k = request.args.get("top_k", type=int, default=20)
+    top_k = min(request.args.get("top_k", type=int, default=20), 200)
 
     papers = get_journal_rankings(name, days=days, top_k=top_k)
 
-    journal_info = None
-    for j in DATA["journals"]:
-        if j["name"] == name:
-            journal_info = j
-            break
+    j_idx = DATA["journal_by_name"][name]
+    journal_info = DATA["journals"][j_idx]
 
     return render_template(
         "journal.html",
@@ -268,7 +267,7 @@ def api_search():
 
     # --- Paper search (by DOI or title) ---
     papers = []
-    is_doi = q.startswith("10.") or "doi" in q_lower
+    is_doi = q.startswith("10.") or q_lower.startswith("doi:")
 
     if is_doi:
         # DOI lookup
@@ -306,7 +305,7 @@ def api_journal(name):
     if name not in DATA["journal_by_name"]:
         return jsonify({"error": "Journal not found"}), 404
     days = request.args.get("days", type=int, default=None)
-    top_k = request.args.get("top_k", type=int, default=20)
+    top_k = min(request.args.get("top_k", type=int, default=20), 200)
     return jsonify(get_journal_rankings(name, days=days, top_k=top_k))
 
 
@@ -325,6 +324,10 @@ _KNOWN_ACRONYMS = {
     "DNA", "RNA", "PCR", "BMI", "WHO", "UK", "US", "USA", "EU", "ICU",
     "MRI", "CT", "TB", "HPV", "HCV", "HBV", "RSV", "COPD", "PTSD", "RCT",
 }
+_ACRONYM_PATTERNS = [
+    (re.compile(r'\b' + re.escape(a.title()) + r'\b'), a)
+    for a in sorted(_KNOWN_ACRONYMS, key=len, reverse=True)
+]
 
 
 @app.template_filter("fix_title")
@@ -334,11 +337,9 @@ def fix_title_filter(title):
         return title
     if title != title.upper():
         return title
-    # Title case, then restore known acronyms as whole words
     result = title.title()
-    for acronym in sorted(_KNOWN_ACRONYMS, key=len, reverse=True):
-        pattern = r'\b' + re.escape(acronym.title()) + r'\b'
-        result = re.sub(pattern, acronym, result)
+    for pattern, acronym in _ACRONYM_PATTERNS:
+        result = pattern.sub(acronym, result)
     return result
 
 
@@ -363,21 +364,24 @@ def doi_url_filter(doi):
 # ---------- Main ----------
 
 # Load data at import time so gunicorn workers have it ready
-import os
 _predictions_dir = os.environ.get("PREDICTIONS_DIR", "predictions")
-load_data(_predictions_dir)
+try:
+    load_data(_predictions_dir)
+except FileNotFoundError as e:
+    print(f"FATAL: Could not load predictions data from '{_predictions_dir}': {e}",
+          file=sys.stderr)
+    sys.exit(1)
 print(f"Loaded {DATA['meta']['n_papers']} papers, "
       f"{DATA['meta']['n_journals']} journals")
 
 
 def main():
     parser = argparse.ArgumentParser(description="medRxiv predictions web app")
-    parser.add_argument("--predictions-dir", default="predictions")
+    parser.add_argument("--predictions-dir", default=_predictions_dir)
     parser.add_argument("--port", type=int, default=5000)
     parser.add_argument("--debug", action="store_true")
     args = parser.parse_args()
 
-    # Reload if a different dir was specified
     if args.predictions_dir != _predictions_dir:
         load_data(args.predictions_dir)
 

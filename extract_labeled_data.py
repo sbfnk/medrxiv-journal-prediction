@@ -130,39 +130,38 @@ def build_labeled_dataset(preprints: list, progress_file: Optional[str] = None) 
 
     print(f"Found {len(published)} published preprints to process", file=sys.stderr)
 
-    progress_f = open(progress_file, 'a') if progress_file else None
+    import contextlib
+    ctx = open(progress_file, 'a') if progress_file else contextlib.nullcontext()
 
-    for i, (preprint_doi, published_doi, preprint) in enumerate(published):
-        if i % 50 == 0:
-            print(f"Processing {i}/{len(published)}...", file=sys.stderr)
+    with ctx as progress_f:
+        for i, (preprint_doi, published_doi, preprint) in enumerate(published):
+            if i % 50 == 0:
+                print(f"Processing {i}/{len(published)}...", file=sys.stderr)
 
-        # Look up journal from published DOI
-        journal_info = lookup_journal_crossref(published_doi)
+            # Look up journal from published DOI
+            journal_info = lookup_journal_crossref(published_doi)
 
-        if journal_info and journal_info['journal']:
-            record = {
-                'preprint_doi': preprint_doi,
-                'published_doi': published_doi,
-                'title': preprint.get('title', ''),
-                'abstract': preprint.get('abstract', ''),
-                'authors': preprint.get('authors', ''),
-                'category': preprint.get('category', ''),
-                'date': preprint.get('date', ''),
-                'journal': journal_info['journal'],
-                'publisher': journal_info['publisher'],
-                'citation_count': journal_info['citation_count'],
-            }
-            labeled.append(record)
+            if journal_info and journal_info['journal']:
+                record = {
+                    'preprint_doi': preprint_doi,
+                    'published_doi': published_doi,
+                    'title': preprint.get('title', ''),
+                    'abstract': preprint.get('abstract', ''),
+                    'authors': preprint.get('authors', ''),
+                    'category': preprint.get('category', ''),
+                    'date': preprint.get('date', ''),
+                    'journal': journal_info['journal'],
+                    'publisher': journal_info['publisher'],
+                    'citation_count': journal_info['citation_count'],
+                }
+                labeled.append(record)
 
-            if progress_f:
-                progress_f.write(json.dumps(record) + '\n')
-                progress_f.flush()
+                if progress_f:
+                    progress_f.write(json.dumps(record) + '\n')
+                    progress_f.flush()
 
-        # Rate limit: ~10 requests per second for polite pool
-        time.sleep(0.1)
-
-    if progress_f:
-        progress_f.close()
+            # Rate limit: ~10 requests per second for polite pool
+            time.sleep(0.1)
 
     return labeled
 

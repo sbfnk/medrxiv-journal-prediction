@@ -28,7 +28,6 @@ from collections import Counter
 
 import joblib
 import numpy as np
-from scipy.optimize import minimize_scalar
 from sklearn.isotonic import IsotonicRegression
 from sklearn.linear_model import LogisticRegression
 from sklearn.preprocessing import LabelEncoder
@@ -40,7 +39,13 @@ from evaluate_knn import (
     predict_knn,
 )
 from train_classifier import build_feature_matrix
-from calibrate import ensemble_proba_matrix
+from calibrate import (
+    ensemble_proba_matrix,
+    reliability_diagram,
+    compute_ece,
+    temperature_scale,
+    fit_temperature,
+)
 
 
 def restrict_and_renormalize(proba, eligible_mask):
@@ -49,62 +54,6 @@ def restrict_and_renormalize(proba, eligible_mask):
     row_sums = restricted.sum(axis=1, keepdims=True)
     row_sums = np.maximum(row_sums, 1e-30)
     return restricted / row_sums
-
-
-def temperature_scale(proba, T):
-    """Apply temperature scaling: log, divide by T, re-softmax."""
-    log_p = np.log(np.maximum(proba, 1e-30))
-    scaled = log_p / T
-    scaled -= scaled.max(axis=1, keepdims=True)
-    exp_s = np.exp(scaled)
-    return exp_s / exp_s.sum(axis=1, keepdims=True)
-
-
-def fit_temperature(proba, true_indices, bounds=(0.1, 20.0)):
-    """Find optimal temperature T minimising NLL."""
-    def nll(T):
-        cal = temperature_scale(proba, T)
-        tp = cal[np.arange(len(true_indices)), true_indices]
-        return -np.mean(np.log(np.maximum(tp, 1e-30)))
-
-    result = minimize_scalar(nll, bounds=bounds, method='bounded')
-    return result.x, result.fun
-
-
-def reliability_diagram(proba, true_indices, n_bins=15):
-    """Top-1 reliability diagram."""
-    confidences = np.max(proba, axis=1)
-    predictions = np.argmax(proba, axis=1)
-    correct = (predictions == true_indices).astype(float)
-
-    bin_edges = np.linspace(0, 1, n_bins + 1)
-    bins = []
-    for i in range(n_bins):
-        lo, hi = bin_edges[i], bin_edges[i + 1]
-        mask = (confidences >= lo) & (confidences <= hi) if i == 0 \
-            else (confidences > lo) & (confidences <= hi)
-        count = int(mask.sum())
-        if count > 0:
-            mean_conf = float(confidences[mask].mean())
-            mean_acc = float(correct[mask].mean())
-        else:
-            mean_conf = float((lo + hi) / 2)
-            mean_acc = 0.0
-        bins.append({
-            "bin_lower": float(lo), "bin_upper": float(hi),
-            "count": count,
-            "mean_confidence": mean_conf, "mean_accuracy": mean_acc,
-            "gap": abs(mean_acc - mean_conf),
-        })
-    return bins
-
-
-def compute_ece(bins):
-    """Expected Calibration Error."""
-    total = sum(b["count"] for b in bins)
-    if total == 0:
-        return 0.0
-    return sum(b["count"] * b["gap"] for b in bins) / total
 
 
 class JournalPredictor:

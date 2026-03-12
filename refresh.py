@@ -189,46 +189,7 @@ def extract_fulltext_from_meca(meca_dir, dois):
 
 # ---------- Embedding ----------
 
-def embed_papers(papers, adapter_path="finetuned-specter2/best_adapter"):
-    """Embed papers using fine-tuned SPECTER2.
-
-    Papers with full_text get full-text embedding; others get
-    title+abstract.
-    """
-    from generate_embeddings import (
-        load_specter2,
-        generate_fulltext_embeddings,
-        select_device,
-    )
-
-    device = select_device()
-    print(f"Loading SPECTER2 model on {device}...", file=sys.stderr)
-    tokenizer, model = load_specter2(device)
-
-    # Load fine-tuned adapter if available
-    adapter_path = Path(adapter_path)
-    if adapter_path.exists():
-        print(f"Loading fine-tuned adapter from {adapter_path}...",
-              file=sys.stderr)
-        model.load_adapter(str(adapter_path), set_active=True)
-    else:
-        print(f"Warning: adapter not found at {adapter_path}, "
-              f"using base SPECTER2", file=sys.stderr)
-
-    # Build records in the format generate_fulltext_embeddings expects
-    records = []
-    for p in papers:
-        records.append({
-            "title": p.get("title", ""),
-            "abstract": p.get("abstract", ""),
-            "full_text": p.get("full_text", ""),
-        })
-
-    print(f"Embedding {len(records)} papers...", file=sys.stderr)
-    embeddings = generate_fulltext_embeddings(
-        records, tokenizer, model, device, batch_size=32, stride=256)
-
-    return embeddings
+from precompute import embed_papers
 
 
 # ---------- Existing predictions management ----------
@@ -318,10 +279,6 @@ def main():
     all_known = training_dois | processed_dois | existing_dois
     papers = fetch_new_preprints(args.days, training_dois,
                                  processed_dois | existing_dois)
-
-    if not papers and not args.skip_fulltext:
-        # Even if no new papers, check for full-text updates
-        pass
 
     # Full text extraction
     fulltext_map = {}

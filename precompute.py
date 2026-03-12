@@ -269,10 +269,6 @@ def main():
     proba = compute_proba_matrix(emb, categories, predictor)
 
     # ---------- Save ----------
-    # Papers (already saved during fetch, but save again for consistency)
-    with open(papers_path, "w") as f:
-        json.dump(papers, f, indent=2)
-
     # Full probability matrix
     np.savez_compressed(output_dir / "proba_matrix.npz", proba=proba)
 
