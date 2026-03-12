@@ -101,7 +101,14 @@
                 <div class="font-medium text-surface-800 dark:text-surface-100 group-hover:text-brand-600 dark:group-hover:text-brand-400 transition-colors truncate">
                     {{ pred.journal }}
                 </div>
-                <div class="text-xs text-surface-500 dark:text-surface-400">
+                <div class="text-xs text-surface-500 dark:text-surface-400 flex items-center gap-1.5">
+                    {% if pred.publisher %}
+                    <span class="w-1.5 h-1.5 rounded-full flex-shrink-0
+                        {% if pred.publisher_type == 'commercial' %}bg-surface-400 dark:bg-surface-400
+                        {% elif pred.publisher_type == 'nonprofit' %}bg-brand-300 dark:bg-brand-500
+                        {% else %}bg-surface-300 dark:bg-surface-500{% endif %}"></span>
+                    <span class="truncate">{{ pred.publisher }}</span> &middot;
+                    {% endif %}
                     {{ pred.training_papers }} training papers
                 </div>
             </div>

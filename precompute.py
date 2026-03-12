@@ -23,6 +23,56 @@ import numpy as np
 
 from extract_labeled_data import fetch_medrxiv_preprints
 
+# Publishers whose primary purpose is commercial profit
+_COMMERCIAL_PUBLISHERS = {
+    "AME Publishing Company",
+    "Elsevier BV",
+    "F1000 Research Ltd",
+    "Fortune Journals",
+    "Frontiers Media SA",
+    "IOP Publishing",
+    "Impact Journals, LLC",
+    "Informa UK Limited",
+    "MDPI AG",
+    "Mary Ann Liebert Inc",
+    "Ovid Technologies (Wolters Kluwer Health)",
+    "SAGE Publications",
+    "Springer Science and Business Media LLC",
+    "Walter de Gruyter GmbH",
+    "Wiley",
+}
+
+# Non-profit entities that operate commercially (university presses, etc.)
+_MIXED_PUBLISHERS = {
+    "Cambridge University Press (CUP)",
+    "JMIR Publications Inc.",
+    "Oxford University Press (OUP)",
+    "PeerJ",
+}
+
+
+def _extract_publishers(dataset_path):
+    """Map journal name → most common publisher from labelled data."""
+    from collections import Counter
+    with open(dataset_path) as f:
+        data = json.load(f)
+    journal_pubs = {}
+    for p in data:
+        j, pub = p.get("journal", ""), p.get("publisher", "")
+        if j and pub:
+            journal_pubs.setdefault(j, []).append(pub)
+    return {j: Counter(pubs).most_common(1)[0][0]
+            for j, pubs in journal_pubs.items()}
+
+
+def _classify_publisher(publisher):
+    """Classify publisher as commercial, nonprofit, or mixed."""
+    if publisher in _COMMERCIAL_PUBLISHERS:
+        return "commercial"
+    if publisher in _MIXED_PUBLISHERS:
+        return "mixed"
+    return "nonprofit" if publisher else ""
+
 
 def fetch_all_papers(start_date, end_date, known_dois):
     """Fetch preprints month by month, filtering known DOIs."""
@@ -226,12 +276,16 @@ def main():
     # Full probability matrix
     np.savez_compressed(output_dir / "proba_matrix.npz", proba=proba)
 
-    # Journal index
+    # Journal index (with publisher info from labelled data)
+    journal_publisher = _extract_publishers(args.dataset)
     journals = []
     for j in predictor.restricted_classes:
+        pub = journal_publisher.get(j, "")
         journals.append({
             "name": j,
             "training_papers": predictor.journal_counts.get(j, 0),
+            "publisher": pub,
+            "publisher_type": _classify_publisher(pub),
         })
     with open(output_dir / "journals.json", "w") as f:
         json.dump(journals, f, indent=2)
