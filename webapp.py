@@ -55,21 +55,11 @@ def load_data(predictions_dir):
         j["name"]: i for i, j in enumerate(DATA["journals"])
     }
 
-    # Precompute per-journal percentile ranks (across ALL papers)
-    # percentile_ranks[i, j] = what percentile paper i is at for journal j
+    # Precompute sorted probability columns for fast percentile lookups
     if DATA["proba"] is not None:
-        proba = DATA["proba"]
-        # For each journal column, rank papers (higher prob = higher percentile)
-        percentile_ranks = np.zeros_like(proba, dtype=np.float32)
-        n = proba.shape[0]
-        for j in range(proba.shape[1]):
-            col = proba[:, j]
-            # rankdata: 1 = lowest, n = highest
-            order = col.argsort().argsort()  # rank from 0 to n-1
-            percentile_ranks[:, j] = (order + 1) / n * 100
-        DATA["percentiles"] = percentile_ranks
+        DATA["proba_sorted"] = np.sort(DATA["proba"], axis=0)
     else:
-        DATA["percentiles"] = None
+        DATA["proba_sorted"] = None
 
     # Paper dates as date objects for filtering
     DATA["paper_dates"] = []
@@ -89,6 +79,16 @@ def load_data(predictions_dir):
     DATA["journal_letters"] = dict(sorted(letters.items()))
 
 
+def percentile(prob_value, j_idx):
+    """Compute percentile rank of a probability value for a journal column.
+
+    Uses binary search on the pre-sorted column — O(log n) per call.
+    """
+    sorted_col = DATA["proba_sorted"][:, j_idx]
+    rank = np.searchsorted(sorted_col, prob_value, side="right")
+    return rank / len(sorted_col) * 100
+
+
 def get_journal_rankings(journal_name, days=None, top_k=20):
     """Compute rankings for a journal from the probability matrix.
 
@@ -100,9 +100,7 @@ def get_journal_rankings(journal_name, days=None, top_k=20):
         return []
 
     proba = DATA["proba"]
-    percentiles = DATA["percentiles"]
     col = proba[:, j_idx]
-    pct_col = percentiles[:, j_idx]
 
     # Date filter
     if days:
@@ -135,7 +133,7 @@ def get_journal_rankings(journal_name, days=None, top_k=20):
             "date": p.get("date", ""),
             "authors": p.get("authors", ""),
             "probability": float(col[idx]),
-            "percentile": float(pct_col[idx]),
+            "percentile": float(percentile(col[idx], j_idx)),
         })
 
     return results
@@ -205,14 +203,16 @@ def paper_view(doi):
     predictions = []
     if DATA["proba"] is not None:
         row = DATA["proba"][idx]
-        pct_row = DATA["percentiles"][idx]
         ranked = np.argsort(row)[::-1]
         for rank, j_idx in enumerate(ranked[:30]):
+            j = DATA["journals"][j_idx]
             predictions.append({
-                "journal": DATA["journals"][j_idx]["name"],
+                "journal": j["name"],
                 "probability": float(row[j_idx]),
-                "percentile": float(pct_row[j_idx]),
-                "training_papers": DATA["journals"][j_idx]["training_papers"],
+                "percentile": float(percentile(row[j_idx], j_idx)),
+                "training_papers": j["training_papers"],
+                "publisher": j.get("publisher", ""),
+                "publisher_type": j.get("publisher_type", ""),
                 "rank": rank + 1,
             })
 
