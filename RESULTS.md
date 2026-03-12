@@ -73,7 +73,7 @@ Three embedding configurations were compared:
 | **SPECTER2 full-text** | **9.9%** | **25.3%** | **32.9%** | **0.171** |
 | nomic-v1.5 full-text | 8.5% | 20.6% | 27.0% | 0.142 |
 
-SPECTER2 full-text is the best embedding. Full text provides a modest but consistent improvement over title+abstract alone. nomic underperformed despite its longer context window — domain-specific pre-training (SPECTER2 was trained on citation graphs) matters more than context length.
+SPECTER2 full-text is the best embedding. Full text helps across all metrics, roughly +0.7pp acc@1 and +2pp acc@10 over title+abstract. nomic underperformed despite its longer context window. SPECTER2's citation-graph pre-training appears to matter more than raw context length.
 
 ## Experiment 2: Contrastive Fine-tuning
 
@@ -97,7 +97,7 @@ Rather than fine-tuning the full [SPECTER2](https://huggingface.co/allenai/spect
 | Fine-tuned (hard-neg) | 20 | 11.5% | 28.0% | 36.2% | 0.191 |
 | **Fine-tuned (hard-neg)** | **50** | **12.3%** | **31.4%** | **41.6%** | **0.215** |
 
-Fine-tuning gives ~1.5pp in acc@1 and ~3pp in acc@10. Higher k also helps. Hard negatives make little difference in kNN alone, but their benefit shows up in the ensemble (below).
+Fine-tuning gives ~1.5pp in acc@1 and ~3pp in acc@10. Higher k also helps. Hard negatives barely matter for kNN on its own, but they do help the ensemble (below).
 
 ## Experiment 3: Trained Classifier
 
@@ -143,7 +143,7 @@ Alpha was tuned via grid search on the validation set over α ∈ {0.0, 0.1, …
 
 ### Discussion
 
-The best configuration uses hard-negative fine-tuned embeddings with an interpolation ensemble (alpha=0.1, C=10). C grid search was the single biggest improvement (+0.9pp acc@1); hard negatives added another +0.9pp. Together they take acc@1 from 18.2% to 20.0%.
+The best configuration uses hard-negative fine-tuned embeddings with an interpolation ensemble (alpha=0.1, C=10). Tuning C from 1 to 10 gave +0.9pp acc@1; hard negatives added another +0.9pp. Together: 18.2% → 20.0%.
 
 Alpha=0.1 means 90% classifier, 10% kNN. With C=10 and enough training data, the classifier carries most of the weight. kNN still helps, especially for journals near the min-papers threshold.
 
@@ -161,7 +161,7 @@ Probabilities are calibrated using isotonic regression fitted on the validation 
 | Max confidence | 0.574 |
 | Mean confidence | 0.155 |
 
-The raw probabilities are already well-calibrated: temperature scaling barely changes them (T ≈ 1.0). The model never assigns more than ~57% to any single journal. ECE of 0.028 means predicted probabilities closely match observed frequencies.
+The raw probabilities are already well-calibrated — temperature scaling barely changes them (T ≈ 1.0). The model never assigns more than ~57% to any single journal. ECE of 0.028 means predictions are off by about 3 percentage points on average.
 
 ## Summary
 
@@ -174,4 +174,4 @@ The raw probabilities are already well-calibrated: temperature scaling barely ch
 
 The best method achieves 20.0% acc@1, 61.4% acc@10, and 0.332 MRR on the 316 journals with ≥10 training papers (covering 69% of test papers). For the top-20 journals, the correct journal appears in the top-10 list 82% of the time.
 
-What mattered most, roughly in order: restricting to journals with ≥10 training papers (largest single effect), tuning classifier regularisation (C=10 vs C=1, +0.9pp acc@1), contrastive fine-tuning with hard negatives (+0.9pp acc@1), and using more neighbours in kNN (helps acc@10, slight cost to acc@1). Calibration required almost no correction (ECE 0.028).
+What mattered most, roughly in order: restricting to journals with ≥10 training papers (largest single effect), tuning classifier regularisation (C=10 vs C=1, +0.9pp), hard negative fine-tuning (+0.9pp), more kNN neighbours (helps acc@10, slight cost to acc@1). Calibration needed almost no correction.

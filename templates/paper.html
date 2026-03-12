@@ -103,10 +103,11 @@
                 </div>
                 <div class="text-xs text-surface-500 dark:text-surface-400 flex items-center gap-1.5">
                     {% if pred.publisher %}
-                    <span class="w-1.5 h-1.5 rounded-full flex-shrink-0
+                    <span class="w-1.5 h-1.5 rounded-full flex-shrink-0 cursor-help
                         {% if pred.publisher_type == 'commercial' %}bg-surface-400 dark:bg-surface-400
                         {% elif pred.publisher_type == 'nonprofit' %}bg-brand-300 dark:bg-brand-500
-                        {% else %}bg-surface-300 dark:bg-surface-500{% endif %}"></span>
+                        {% else %}bg-surface-300 dark:bg-surface-500{% endif %}"
+                        title="{{ pred.publisher }} — {% if pred.publisher_type == 'mixed' %}university press / society{% else %}{{ pred.publisher_type }}{% endif %}"></span>
                     <span class="truncate">{{ pred.publisher }}</span> &middot;
                     {% endif %}
                     {{ pred.training_papers }} training papers
@@ -123,7 +124,7 @@
                 </div>
                 <span class="text-sm font-bold w-16 text-right cursor-help
                     {% if pred.percentile >= 99 %}text-brand-500 dark:text-brand-300{% elif pred.percentile >= 95 %}text-brand-600 dark:text-brand-400{% else %}text-surface-500 dark:text-surface-300{% endif %}"
-                    title="Percentile rank: this paper scores higher than {{ pred.percentile | round(1) }}% of all preprints for {{ pred.journal }}">
+                    title="This paper ranks in the top {{ (100 - pred.percentile) | round(1) }}% of all {{ pred.training_papers }}-paper preprints scored for {{ pred.journal }}. Lower is better — Top 1% means only 1 in 100 preprints score higher.">
                     {{ pred.percentile | top_pct }}
                 </span>
                 <span class="text-xs text-surface-400 dark:text-surface-400 w-10 text-right cursor-help"

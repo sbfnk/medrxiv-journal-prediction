@@ -1,6 +1,6 @@
 # Preprint Match
 
-Predict which journal a medRxiv preprint will be published in, with calibrated probabilities. Also supports the reverse: given a journal, find the preprints most likely to match it.
+Predict which journal a medRxiv preprint will be published in, with calibrated probabilities. Works both ways: given a journal, find the preprints most likely to end up there.
 
 ## Web app
 
