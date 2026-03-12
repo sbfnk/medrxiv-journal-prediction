@@ -47,17 +47,6 @@
                 {{ paper.category }}
             </span>
             {% endif %}
-            {% if paper.has_fulltext %}
-            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 cursor-help"
-                  title="Predictions use the full paper text, which is more accurate than title and abstract alone">
-                Full text
-            </span>
-            {% else %}
-            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 cursor-help"
-                  title="Full text was not available — predictions are based on title and abstract only, which is less accurate">
-                Title + abstract only
-            </span>
-            {% endif %}
         </div>
 
         <a href="{{ paper.doi | doi_url }}" target="_blank" rel="noopener"
@@ -82,9 +71,9 @@
 
     <!-- Predicted journals -->
     <div class="flex items-center justify-between mb-4">
-        <h2 class="text-xl font-semibold text-surface-900 dark:text-white">Predicted journal destinations</h2>
+        <h2 class="text-xl font-semibold text-surface-900 dark:text-white">Matching journals</h2>
         <div class="hidden sm:flex items-center gap-3 text-xs text-surface-400 dark:text-surface-400">
-            <span class="inline-flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-brand-300 dark:bg-brand-500"></span>Non-profit</span>
+            <span class="inline-flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-brand-600 dark:bg-brand-400"></span>Non-profit</span>
             <span class="inline-flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-surface-300 dark:bg-surface-500"></span>University press</span>
             <span class="inline-flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-surface-400 dark:bg-surface-400"></span>Commercial</span>
         </div>
@@ -114,7 +103,7 @@
                     {% if pred.publisher %}
                     <span class="w-1.5 h-1.5 rounded-full flex-shrink-0 cursor-help
                         {% if pred.publisher_type == 'commercial' %}bg-surface-400 dark:bg-surface-400
-                        {% elif pred.publisher_type == 'nonprofit' %}bg-brand-300 dark:bg-brand-500
+                        {% elif pred.publisher_type == 'nonprofit' %}bg-brand-600 dark:bg-brand-400
                         {% else %}bg-surface-300 dark:bg-surface-500{% endif %}"
                         title="{{ pred.publisher }} — {% if pred.publisher_type == 'mixed' %}university press / society{% else %}{{ pred.publisher_type }}{% endif %}"></span>
                     <span class="truncate">{{ pred.publisher }}</span> &middot;
@@ -123,23 +112,24 @@
                 </div>
             </div>
 
-            <!-- Percentile + probability -->
-            <div class="flex items-center gap-3 flex-shrink-0 w-56">
-                <div class="flex-1 bg-surface-200 dark:bg-surface-600 rounded-full h-2 overflow-hidden"
-                     title="Match strength — a fuller bar means a stronger fit for this journal">
-                    <div class="prob-bar h-full rounded-full"
-                         style="width: {{ pred.percentile }}%">
-                    </div>
-                </div>
-                <span class="text-sm font-bold w-16 text-right cursor-help
+            <!-- Match metrics -->
+            <div class="flex items-center gap-3 flex-shrink-0">
+                <span class="text-sm font-bold cursor-help
                     {% if pred.percentile >= 99 %}text-brand-500 dark:text-brand-300{% elif pred.percentile >= 95 %}text-brand-600 dark:text-brand-400{% else %}text-surface-500 dark:text-surface-300{% endif %}"
-                    title="This paper scores higher than {{ pred.percentile | round(1) }}% of all preprints for {{ pred.journal }}. Top 1% = only 1 in 100 preprints score higher.">
+                    title="Percentile rank: this paper scores higher than {{ pred.percentile | round(1) }}% of all preprints for {{ pred.journal }}. Top 1% means only 1 in 100 preprints are a stronger match.">
                     {{ pred.percentile | top_pct }}
                 </span>
-                <span class="text-xs text-surface-400 dark:text-surface-400 w-10 text-right cursor-help"
-                    title="Model probability: the predicted chance ({{ pred.probability | pct }}) that this preprint will be published in {{ pred.journal }}">
+                {% if pred.lift and pred.lift >= 1.5 %}
+                <span class="text-xs text-surface-400 dark:text-surface-400 cursor-help"
+                    title="{{ pred.lift | lift_label }}: this paper's match score ({{ pred.probability | pct }}) is {{ pred.lift | round(1) }}× the average preprint's score for {{ pred.journal }}">
+                    {{ pred.lift | lift_label }}
+                </span>
+                {% else %}
+                <span class="text-xs text-surface-400 dark:text-surface-400 cursor-help"
+                    title="Model probability: {{ pred.probability | pct }} match score for {{ pred.journal }}">
                     {{ pred.probability | pct }}
                 </span>
+                {% endif %}
             </div>
         </a>
         {% endif %}

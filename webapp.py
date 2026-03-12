@@ -124,10 +124,13 @@ def get_journal_rankings(journal_name, days=None, top_k=20):
     filtered_probs = col[filtered_indices]
     ranked = np.argsort(filtered_probs)[::-1][:top_k]
 
+    baseline = float(DATA["proba_mean"][j_idx]) if DATA["proba_mean"] is not None else 0
+
     results = []
     for rank, pos in enumerate(ranked):
         idx = filtered_indices[pos]
         p = DATA["papers"][idx]
+        prob = float(col[idx])
         results.append({
             "rank": rank + 1,
             "doi": p["doi"],
@@ -136,8 +139,9 @@ def get_journal_rankings(journal_name, days=None, top_k=20):
             "category": p.get("category", ""),
             "date": p.get("date", ""),
             "authors": p.get("authors", ""),
-            "probability": float(col[idx]),
+            "probability": prob,
             "percentile": float(percentile(col[idx], j_idx)),
+            "lift": prob / baseline if baseline > 0 else None,
         })
 
     return results
@@ -213,14 +217,17 @@ def paper_view(doi):
         ranked = np.argsort(row)[::-1]
         for rank, j_idx in enumerate(ranked[:30]):
             j = DATA["journals"][j_idx]
+            prob = float(row[j_idx])
+            baseline = float(DATA["proba_mean"][j_idx]) if DATA["proba_mean"] is not None else 0
             predictions.append({
                 "journal": j["name"],
-                "probability": float(row[j_idx]),
+                "probability": prob,
                 "percentile": float(percentile(row[j_idx], j_idx)),
                 "training_papers": j["training_papers"],
                 "publisher": j.get("publisher", ""),
                 "publisher_type": j.get("publisher_type", ""),
                 "rank": rank + 1,
+                "lift": prob / baseline if baseline > 0 else None,
             })
 
     return render_template(
@@ -361,6 +368,18 @@ def top_pct_filter(percentile):
         return f"Top {complement:.1f}%"
     else:
         return f"Top {complement:.0f}%"
+
+
+@app.template_filter("lift_label")
+def lift_label_filter(lift):
+    """Format lift as '× avg' label."""
+    if lift is None or lift < 1.5:
+        return ""
+    if lift >= 100:
+        return f"{lift:.0f}× avg"
+    if lift >= 10:
+        return f"{lift:.0f}× avg"
+    return f"{lift:.1f}× avg"
 
 
 @app.template_filter("doi_url")

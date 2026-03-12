@@ -24,10 +24,7 @@ embeddings/
 *.joblib
 
 # Evaluation results (regenerated from pipeline)
-knn_results*.json
-classifier_results*.json
-ensemble_results*.json
-calibration_results*.json
+results/
 
 # Fine-tuned models
 finetuned-specter2/

@@ -10,13 +10,13 @@
     <div class="prose prose-surface dark:prose-invert space-y-6 text-surface-600 dark:text-surface-300 leading-relaxed">
 
         <p class="text-lg">
-            Every week, hundreds of new preprints appear on medRxiv. Each one will eventually find its way to a journal, or not. We predict where.
+            Every week, hundreds of new preprints appear on medRxiv. We match them to the journals that publish similar work.
         </p>
 
         <h2 class="text-xl font-semibold text-surface-900 dark:text-white mt-10 mb-3">What this is</h2>
 
         <p>
-            Preprint Match predicts which journal a medRxiv preprint is most likely to be published in. We train on {{ "{:,}".format(meta.n_papers_training) }} preprints that have already been published, picking up on what makes a paper a good fit for one journal over another.
+            Preprint Match identifies which journals best match a medRxiv preprint's content. We train on {{ "{:,}".format(meta.n_papers_training) }} preprints that were later published in peer-reviewed journals, learning what makes a paper a good fit for one journal over another.
         </p>
 
         <p>
@@ -34,7 +34,7 @@
         </p>
 
         <p>
-            A personalised feed could do better: show you relevant work as it appears, not months later when it's finally published.
+            A personalised feed could do better: show you relevant work as it appears, not months later when a journal gets around to it.
         </p>
 
         <h2 class="text-xl font-semibold text-surface-900 dark:text-white mt-10 mb-3">Where this is going</h2>
@@ -48,7 +48,7 @@
         </p>
 
         <p>
-            Journal prediction is a stepping stone. What matters is connecting researchers with work they need to see, regardless of where or whether it gets published. Preprints don't have to wait for journals to be reviewed, either: platforms like
+            Journal matching is a stepping stone. The real goal is connecting researchers with work they need to see, when it appears. Preprints don't have to wait for journals to be reviewed, either: platforms like
             <a href="https://peercommunityin.org/" class="text-brand-600 dark:text-brand-400 hover:underline">Peer Community In</a>,
             <a href="https://prereview.org/" class="text-brand-600 dark:text-brand-400 hover:underline">PREreview</a>,
             <a href="https://rrid.mitpress.mit.edu/" class="text-brand-600 dark:text-brand-400 hover:underline">Rapid Reviews: Infectious Diseases</a>, and
@@ -59,20 +59,20 @@
         <h2 class="text-xl font-semibold text-surface-900 dark:text-white mt-10 mb-3">How it works</h2>
 
         <p>
-            We look at which previously-published papers are most similar to a new preprint, and use that to estimate which journal would accept it. The model learns what makes a paper fit for one journal over another — topic, methods, writing style, scope — from {{ "{:,}".format(meta.n_papers_training) }} preprints that have already been published.
+            We look at which previously-published papers are most similar to a new preprint, and use that to identify which journals publish similar work. The model picks up on topic, methods, writing style and scope from {{ "{:,}".format(meta.n_papers_training) }} preprints that have already been published.
         </p>
 
         <p>
-            Under the hood: each paper is encoded into a numerical vector using
+            Each paper's title and abstract are encoded into a numerical vector using
             <a href="https://huggingface.co/allenai/specter2" class="text-brand-600 dark:text-brand-400 hover:underline">SPECTER2</a>,
-            a scientific document embedding model trained on citation graphs. We fine-tune it using contrastive learning so that papers published in the same journal end up closer together, with training batches grouped by medRxiv category to force the model to make fine-grained distinctions.
+            a scientific document embedding model trained on citation graphs. We fine-tune it with contrastive learning so that papers published in the same journal end up closer together, with training batches grouped by medRxiv category to force fine-grained distinctions.
             Predictions combine a nearest-neighbour lookup with a logistic regression classifier, blended 90/10 and tuned on a held-out validation set. Probabilities are calibrated using isotonic regression so that when the model says "15% chance of PLOS ONE", roughly 15% of such predictions turn out correct.
         </p>
 
         <h2 class="text-xl font-semibold text-surface-900 dark:text-white mt-10 mb-3">How well it works</h2>
 
         <p>
-            We evaluate on {{ meta.n_journals }} journals that have at least 10 papers in the training set — about 70% of all published preprints land in one of these. On a held-out test set of 6,950 papers, the model gets the exact journal right 20% of the time (versus under 1% by random chance), and the correct journal appears in the top 10 predictions 61% of the time. For the 20 most common journals, the top-10 hit rate is 82%.
+            We evaluate on {{ meta.n_journals }} journals that have at least 10 papers in the training set (about 70% of all published preprints land in one of these). On a held-out test set of 6,950 papers, the model gets the exact journal right 20% of the time (versus under 1% by random chance), and the correct journal appears in the top 10 predictions 61% of the time. For the 20 most common journals, the top-10 hit rate is 82%.
         </p>
 
         <p>
@@ -82,11 +82,11 @@
         <h2 class="text-xl font-semibold text-surface-900 dark:text-white mt-10 mb-3">Limitations</h2>
 
         <p>
-            This is a content-based classifier. It recognises which journals tend to publish which kinds of content. It does not assess quality, novelty, or editorial fit — it cannot tell you whether a paper will survive peer review, only that it looks like the kind of paper a journal has published before.
+            This is a content-based classifier. It recognises which journals tend to publish which kinds of content. It does not assess quality or editorial fit, and it cannot tell you whether a paper will survive peer review. It can only tell you that a paper looks like the kind of work a journal has published before.
         </p>
 
         <p>
-            The training data consists entirely of preprints that were successfully published. Preprints that were never published, or took a very different path, are absent. The model has no temporal awareness — publication patterns shift over time, and a paper matching a journal's 2020 output may not match its 2026 editorial direction.
+            The training data consists entirely of preprints that were successfully published. Preprints that were never published, or took a very different path, are absent. The model also has no temporal awareness: publication patterns shift over time, and a paper matching a journal's 2020 output may not match its 2026 editorial direction.
         </p>
 
         <p>
