@@ -23,6 +23,7 @@ import numpy as np
 from flask import Flask, render_template, jsonify, request, abort
 
 app = Flask(__name__)
+app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 3600  # cache static files 1 hour
 
 # Global data — loaded once at startup
 DATA = {}

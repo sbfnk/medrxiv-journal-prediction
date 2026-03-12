@@ -50,9 +50,9 @@
         </div>
 
         <a href="{{ paper.doi | doi_url }}" target="_blank" rel="noopener"
-           class="inline-flex items-center text-brand-600 dark:text-brand-400 hover:text-brand-500 dark:hover:text-brand-300 text-sm font-medium transition-colors">
-            View on medRxiv
-            <svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+           class="inline-flex items-center text-brand-600 dark:text-brand-400 hover:text-brand-500 dark:hover:text-brand-300 text-sm transition-colors font-mono">
+            {{ paper.doi }}
+            <svg class="w-3.5 h-3.5 ml-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
             </svg>
         </a>
@@ -73,9 +73,9 @@
     <div class="flex items-center justify-between mb-4">
         <h2 class="text-xl font-semibold text-surface-900 dark:text-white">Matching journals</h2>
         <div class="hidden sm:flex items-center gap-3 text-xs text-surface-400 dark:text-surface-400">
-            <span class="inline-flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-brand-600 dark:bg-brand-400"></span>Non-profit</span>
-            <span class="inline-flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-surface-300 dark:bg-surface-500"></span>University press</span>
-            <span class="inline-flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-surface-400 dark:bg-surface-400"></span>Commercial</span>
+            <span class="inline-flex items-center gap-1"><span class="text-brand-600 dark:text-brand-400">●</span>Non-profit</span>
+            <span class="inline-flex items-center gap-1"><span class="text-surface-400 dark:text-surface-400">◐</span>University press</span>
+            <span class="inline-flex items-center gap-1"><span class="text-surface-400 dark:text-surface-400">○</span>Commercial</span>
         </div>
     </div>
 
@@ -101,11 +101,12 @@
                 </div>
                 <div class="text-xs text-surface-500 dark:text-surface-400 flex items-center gap-1.5">
                     {% if pred.publisher %}
-                    <span class="w-1.5 h-1.5 rounded-full flex-shrink-0 cursor-help
-                        {% if pred.publisher_type == 'commercial' %}bg-surface-400 dark:bg-surface-400
-                        {% elif pred.publisher_type == 'nonprofit' %}bg-brand-600 dark:bg-brand-400
-                        {% else %}bg-surface-300 dark:bg-surface-500{% endif %}"
-                        title="{{ pred.publisher }} — {% if pred.publisher_type == 'mixed' %}university press / society{% else %}{{ pred.publisher_type }}{% endif %}"></span>
+                    <span class="flex-shrink-0 cursor-help text-xs leading-none
+                        {% if pred.publisher_type == 'commercial' %}text-surface-400 dark:text-surface-400
+                        {% elif pred.publisher_type == 'nonprofit' %}text-brand-600 dark:text-brand-400
+                        {% else %}text-surface-400 dark:text-surface-400{% endif %}"
+                        title="{{ pred.publisher }} — {% if pred.publisher_type == 'mixed' %}university press / society{% else %}{{ pred.publisher_type }}{% endif %}"
+                    >{% if pred.publisher_type == 'commercial' %}○{% elif pred.publisher_type == 'nonprofit' %}●{% else %}◐{% endif %}</span>
                     <span class="truncate">{{ pred.publisher }}</span> &middot;
                     {% endif %}
                     based on {{ pred.training_papers }} published papers
@@ -113,20 +114,26 @@
             </div>
 
             <!-- Match metrics -->
-            <div class="flex items-center gap-3 flex-shrink-0">
-                <span class="text-sm font-bold cursor-help
-                    {% if pred.percentile >= 99 %}text-brand-500 dark:text-brand-300{% elif pred.percentile >= 95 %}text-brand-600 dark:text-brand-400{% else %}text-surface-500 dark:text-surface-300{% endif %}"
+            <div class="flex items-center gap-3 flex-shrink-0 w-52">
+                <span class="text-xs text-surface-400 dark:text-surface-400 w-16 text-right cursor-help
+                    {% if pred.percentile >= 99 %}font-semibold text-brand-500 dark:text-brand-300{% elif pred.percentile >= 95 %}font-semibold text-brand-600 dark:text-brand-400{% endif %}"
                     title="Percentile rank: this paper scores higher than {{ pred.percentile | round(1) }}% of all preprints for {{ pred.journal }}. Top 1% means only 1 in 100 preprints are a stronger match.">
                     {{ pred.percentile | top_pct }}
                 </span>
+                <div class="flex-1 bg-surface-200 dark:bg-surface-600 rounded-full h-2 overflow-hidden"
+                     title="Relative match strength: how this journal compares to the best match for this paper">
+                    <div class="prob-bar h-full rounded-full"
+                         style="width: {{ (pred.probability / predictions[0].probability * 100) | round(1) }}%">
+                    </div>
+                </div>
                 {% if pred.lift and pred.lift >= 1.5 %}
-                <span class="text-xs text-surface-400 dark:text-surface-400 cursor-help"
+                <span class="text-xs font-medium text-surface-500 dark:text-surface-300 w-14 text-right cursor-help"
                     title="{{ pred.lift | lift_label }}: this paper's match score ({{ pred.probability | pct }}) is {{ pred.lift | round(1) }}× the average preprint's score for {{ pred.journal }}">
                     {{ pred.lift | lift_label }}
                 </span>
                 {% else %}
-                <span class="text-xs text-surface-400 dark:text-surface-400 cursor-help"
-                    title="Model probability: {{ pred.probability | pct }} match score for {{ pred.journal }}">
+                <span class="text-xs text-surface-400 dark:text-surface-400 w-14 text-right cursor-help"
+                    title="Match score: {{ pred.probability | pct }} for {{ pred.journal }}">
                     {{ pred.probability | pct }}
                 </span>
                 {% endif %}
