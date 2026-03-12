@@ -7,6 +7,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY webapp.py .
 COPY templates/ templates/
+COPY static/ static/
 
 # Copy only the essential prediction data
 COPY predictions/proba_matrix.npz predictions/
