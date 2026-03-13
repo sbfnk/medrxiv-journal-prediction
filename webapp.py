@@ -263,6 +263,15 @@ def api_search():
     Journal priority: name starts with query > word boundary > substring.
     """
     q = request.args.get("q", "").strip()
+    # Strip DOI URL prefixes so users can paste full URLs
+    for prefix in ("https://doi.org/", "http://doi.org/",
+                    "https://www.medrxiv.org/content/",
+                    "http://www.medrxiv.org/content/"):
+        if q.lower().startswith(prefix):
+            q = q[len(prefix):]
+            break
+    # Strip trailing version (e.g., "v1", "v2")
+    q = re.sub(r'v\d+$', '', q).rstrip('/')
     q_lower = q.lower()
     if not q:
         return jsonify({"journals": [], "papers": []})
