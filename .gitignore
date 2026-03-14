@@ -49,5 +49,13 @@ venv/
 hist.txt
 hist_crossref.txt
 
+# Node (Tailwind CLI)
+node_modules/
+package.json
+package-lock.json
+
+# Design explorations
+design-explorations/
+
 # OS
 .DS_Store
