@@ -16,6 +16,7 @@ Usage:
 import json
 import argparse
 import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -74,34 +75,77 @@ def _classify_publisher(publisher):
     return "nonprofit" if publisher else ""
 
 
-def fetch_all_papers(start_date, end_date, known_dois,
-                     servers=("medrxiv",)):
-    """Fetch preprints month by month, filtering known DOIs."""
-    all_papers = {}
-    cursor = datetime.strptime(start_date, "%Y-%m-%d")
+def _build_month_chunks(start_date, end_date, servers):
+    """Build list of (server, start, end) tuples for parallel fetching."""
+    chunks = []
+    start = datetime.strptime(start_date, "%Y-%m-%d")
     end = datetime.strptime(end_date, "%Y-%m-%d")
-
     for server in servers:
-        cursor = datetime.strptime(start_date, "%Y-%m-%d")
+        cursor = start
         while cursor < end:
             chunk_end = min(cursor + timedelta(days=30), end)
-            s = cursor.strftime("%Y-%m-%d")
-            e = chunk_end.strftime("%Y-%m-%d")
-            print(f"  Fetching {server} {s} to {e}...",
-                  file=sys.stderr, end=" ")
-            raw = fetch_preprints(s, e, server, max_records=5000)
+            chunks.append((server,
+                           cursor.strftime("%Y-%m-%d"),
+                           chunk_end.strftime("%Y-%m-%d")))
+            cursor = chunk_end
+    return chunks
+
+
+def _fetch_chunk(args):
+    """Fetch a single month chunk. Used by ThreadPoolExecutor."""
+    server, s, e = args
+    raw = fetch_preprints(s, e, server, max_records=5000)
+    return server, s, e, raw
+
+
+def fetch_all_papers(start_date, end_date, known_dois,
+                     servers=("medrxiv",), existing_papers=None,
+                     papers_path=None, workers=10):
+    """Fetch preprints in parallel month chunks, filtering known DOIs.
+
+    Saves incrementally to papers_path so progress is not lost if
+    interrupted.
+    """
+    papers_list = list(existing_papers) if existing_papers else []
+    seen_dois = {p["doi"] for p in papers_list} | known_dois
+    chunks = _build_month_chunks(start_date, end_date, servers)
+    total_new = 0
+
+    print(f"  {len(chunks)} month chunks, {workers} parallel workers",
+          file=sys.stderr)
+
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = {pool.submit(_fetch_chunk, c): c for c in chunks}
+        for future in as_completed(futures):
+            server, s, e, raw = future.result()
             added = 0
             for p in raw:
                 doi = p.get("doi", "")
-                if doi and doi not in known_dois and doi not in all_papers:
-                    p["_source"] = server
-                    all_papers[doi] = p
+                if doi and doi not in seen_dois:
+                    seen_dois.add(doi)
+                    papers_list.append({
+                        "doi": doi,
+                        "title": p.get("title", ""),
+                        "abstract": p.get("abstract", ""),
+                        "category": p.get("category", ""),
+                        "date": p.get("date", ""),
+                        "authors": p.get("authors", ""),
+                        "has_fulltext": bool(p.get("full_text")),
+                        "source": server,
+                    })
                     added += 1
-            print(f"{len(raw)} fetched, {added} new", file=sys.stderr)
-            cursor = chunk_end
+            total_new += added
+            print(f"  {server} {s}→{e}: {len(raw)} fetched, {added} new "
+                  f"({total_new} total new)", file=sys.stderr)
 
-    print(f"  Total: {len(all_papers)} new preprints", file=sys.stderr)
-    return list(all_papers.values())
+            # Save after each completed chunk
+            if added > 0 and papers_path:
+                with open(papers_path, "w") as f:
+                    json.dump(papers_list, f)
+
+    print(f"  Total: {total_new} new preprints, "
+          f"{len(papers_list)} papers overall", file=sys.stderr)
+    return papers_list
 
 
 def embed_papers(papers, adapter_path="finetuned-specter2/best_adapter"):
@@ -219,29 +263,12 @@ def main():
         servers = ["medrxiv", "biorxiv"] if args.server == "both" else [args.server]
         print(f"Fetching {start_date} to {end_date} "
               f"({', '.join(servers)})...", file=sys.stderr)
-        new_papers = fetch_all_papers(start_date, end_date, known,
-                                      servers=servers)
-
-        if new_papers:
-            for p in new_papers:
-                papers.append({
-                    "doi": p["doi"],
-                    "title": p.get("title", ""),
-                    "abstract": p.get("abstract", ""),
-                    "category": p.get("category", ""),
-                    "date": p.get("date", ""),
-                    "authors": p.get("authors", ""),
-                    "has_fulltext": bool(p.get("full_text")),
-                    "source": p.get("_source", "medrxiv"),
-                })
-
-            # Save papers metadata immediately
-            with open(papers_path, "w") as f:
-                json.dump(papers, f, indent=2)
-            print(f"Saved {len(papers)} papers to {papers_path}",
-                  file=sys.stderr)
-        else:
-            print("No new papers found.", file=sys.stderr)
+        papers = fetch_all_papers(start_date, end_date, known,
+                                  servers=servers,
+                                  existing_papers=papers,
+                                  papers_path=papers_path)
+        print(f"Total: {len(papers)} papers in {papers_path}",
+              file=sys.stderr)
 
     if args.fetch_only:
         print(f"\nFetch complete: {len(papers)} papers in {papers_path}",
