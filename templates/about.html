@@ -72,11 +72,11 @@
         <h2 class="text-xl font-semibold text-surface-900 dark:text-white mt-10 mb-3">How well it works</h2>
 
         <p>
-            We evaluate on {{ meta.n_journals }} journals that have at least 10 papers in the training set (about 70% of all published preprints land in one of these). On a held-out test set of 6,950 papers, the model gets the exact journal right 20% of the time (versus under 1% by random chance), and the correct journal appears in the top 10 predictions 61% of the time. For the 20 most common journals, the top-10 hit rate is 82%.
+            We evaluate on {{ meta.n_journals }} journals that have at least 10 papers in the training set. On a held-out test set of 29,150 papers, the model gets the exact journal right 23% of the time (versus under 0.1% by random chance), and the correct journal appears in the top 10 predictions 67% of the time. For the 20 most common journals, the top-10 hit rate is 86%.
         </p>
 
         <p>
-            Performance drops for less common journals: about 10% exact accuracy for mid-frequency journals, and the model cannot reliably predict journals with fewer than 10 training papers. Preprints headed for niche journals outside the {{ meta.n_journals }} we cover will still get predictions, but only among the journals we know about — the model cannot tell you it doesn't know.
+            Performance drops for less common journals: about 13% exact accuracy for mid-frequency journals, and the model cannot reliably predict journals with fewer than 10 training papers. Preprints headed for niche journals outside the {{ meta.n_journals }} we cover will still get predictions, but only among the journals we know about — the model cannot tell you it doesn't know.
         </p>
 
         <h2 class="text-xl font-semibold text-surface-900 dark:text-white mt-10 mb-3">Limitations</h2>
@@ -108,6 +108,14 @@
 
         <p>
             Built by <a href="https://epiforecasts.io/people/" class="text-brand-600 dark:text-brand-400 hover:underline">Sebastian Funk</a>.
+        </p>
+
+        <h2 class="text-xl font-semibold text-surface-900 dark:text-white mt-10 mb-3">Support</h2>
+
+        <p>
+            This project is free and open source. If you find it useful, consider
+            <a href="https://github.com/sponsors/sbfnk" class="text-brand-600 dark:text-brand-400 hover:underline">sponsoring on GitHub</a>
+            to help cover hosting costs.
         </p>
 
         <h2 class="text-xl font-semibold text-surface-900 dark:text-white mt-10 mb-3">Contact</h2>
