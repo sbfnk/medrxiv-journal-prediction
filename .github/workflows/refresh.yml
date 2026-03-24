@@ -37,16 +37,16 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="data-latest"
-          mkdir -p model predictions
+          mkdir -p model-v4 predictions
 
           echo "Downloading model artifacts..."
-          gh release download "$TAG" -p "model.tar.gz" -D /tmp
-          tar xzf /tmp/model.tar.gz
+          gh release download "$TAG" -p "model-v4.tar.gz" -D /tmp
+          tar xzf /tmp/model-v4.tar.gz
 
           echo "Downloading adapter..."
-          gh release download "$TAG" -p "adapter.tar.gz" -D /tmp || echo "No adapter found, using base model"
-          if [ -f /tmp/adapter.tar.gz ]; then
-            tar xzf /tmp/adapter.tar.gz
+          gh release download "$TAG" -p "adapter-v4.tar.gz" -D /tmp || echo "No adapter found, using base model"
+          if [ -f /tmp/adapter-v4.tar.gz ]; then
+            tar xzf /tmp/adapter-v4.tar.gz
           fi
 
           echo "Downloading labeled dataset..."
@@ -58,20 +58,19 @@ jobs:
           tar xzf /tmp/predictions-state.tar.gz
 
           echo "Files downloaded:"
-          ls -lh model/ predictions/ labeled_dataset.json
+          ls -lh model-v4/ predictions/ labeled_dataset.json
 
       - name: Fetch new preprints and score
         run: |
-          # Determine adapter path
           ADAPTER=""
-          for d in finetuned-specter2-v2-hardneg/best_adapter finetuned-specter2/best_adapter; do
+          for d in finetuned-specter2-v4/best_adapter; do
             if [ -d "$d" ]; then
               ADAPTER="$d"
               break
             fi
           done
 
-          ARGS="--model-dir model --dataset labeled_dataset.json --output-dir predictions"
+          ARGS="--model-dir model-v4 --dataset labeled_dataset.json --output-dir predictions"
           if [ -n "$ADAPTER" ]; then
             ARGS="$ARGS --adapter-path $ADAPTER"
           fi
