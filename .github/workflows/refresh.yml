@@ -99,6 +99,9 @@ jobs:
           echo "Uploading to release..."
           gh release upload "data-latest" --clobber /tmp/predictions-state.tar.gz
 
+      - name: Prepare slim dataset for Docker
+        run: cp labeled_dataset.json labeled_dataset_slim.json
+
       - name: Deploy to Fly.io
         uses: superfly/flyctl-actions/setup-flyctl@master
 
