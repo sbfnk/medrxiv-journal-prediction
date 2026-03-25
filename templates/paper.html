@@ -150,7 +150,7 @@
                         title="{{ pred.publisher }} — {% if pred.publisher_type == 'mixed' %}university press / society{% else %}{{ pred.publisher_type }}{% endif %}"
                     >{% if pred.publisher_type == 'commercial' %}○{% elif pred.publisher_type == 'nonprofit' %}●{% else %}◐{% endif %}</span>
                     {% endif %}
-                    based on {{ pred.training_papers }} papers
+                    {{ pred.training_papers }} papers in training set
                 </div>
             </div>
 
