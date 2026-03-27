@@ -49,10 +49,10 @@
 
         <p>
             Journal matching is a stepping stone. The real goal is connecting researchers with work they need to see, when it appears. Preprints don't have to wait for journals to be reviewed, either: platforms like
-            <a href="https://peercommunityin.org/" class="text-brand-600 dark:text-brand-400 hover:underline">Peer Community In</a>,
-            <a href="https://prereview.org/" class="text-brand-600 dark:text-brand-400 hover:underline">PREreview</a>,
-            <a href="https://rrid.mitpress.mit.edu/" class="text-brand-600 dark:text-brand-400 hover:underline">Rapid Reviews: Infectious Diseases</a>, and
-            <a href="https://elifesciences.org/" class="text-brand-600 dark:text-brand-400 hover:underline">eLife</a>
+            <a href="https://peercommunityin.org/" class="text-brand-700 dark:text-brand-400 hover:underline">Peer Community In</a>,
+            <a href="https://prereview.org/" class="text-brand-700 dark:text-brand-400 hover:underline">PREreview</a>,
+            <a href="https://rrid.mitpress.mit.edu/" class="text-brand-700 dark:text-brand-400 hover:underline">Rapid Reviews: Infectious Diseases</a>, and
+            <a href="https://elifesciences.org/" class="text-brand-700 dark:text-brand-400 hover:underline">eLife</a>
             are already reviewing preprints openly. Showing those evaluations alongside predictions is a natural next step.
         </p>
 
@@ -64,7 +64,7 @@
 
         <p>
             Each paper's title and abstract are encoded into a numerical vector using
-            <a href="https://huggingface.co/allenai/specter2" class="text-brand-600 dark:text-brand-400 hover:underline">SPECTER2</a>,
+            <a href="https://huggingface.co/allenai/specter2" class="text-brand-700 dark:text-brand-400 hover:underline">SPECTER2</a>,
             a scientific document embedding model trained on citation graphs. We fine-tune it with contrastive learning so that papers published in the same journal end up closer together, with training batches grouped by preprint category to force fine-grained distinctions.
             Predictions combine a nearest-neighbour lookup with a logistic regression classifier, blended 90/10 and tuned on a held-out validation set. Probabilities are calibrated using isotonic regression so that when the model says "15% chance of PLOS ONE", roughly 15% of such predictions turn out correct.
         </p>
@@ -99,23 +99,23 @@
 
         <p>
             The full methodology (dataset construction, embedding comparison, fine-tuning, per-tier evaluation, calibration) is described in
-            <a href="https://github.com/sbfnk/preprint-match/blob/main/RESULTS.md" class="text-brand-600 dark:text-brand-400 hover:underline">RESULTS.md</a>.
+            <a href="https://github.com/sbfnk/preprint-match/blob/main/RESULTS.md" class="text-brand-700 dark:text-brand-400 hover:underline">RESULTS.md</a>.
             All code is
-            <a href="https://github.com/sbfnk/preprint-match" class="text-brand-600 dark:text-brand-400 hover:underline">open source</a>.
+            <a href="https://github.com/sbfnk/preprint-match" class="text-brand-700 dark:text-brand-400 hover:underline">open source</a>.
         </p>
 
         <h2 class="text-xl font-semibold text-surface-900 dark:text-white mt-10 mb-3">Who</h2>
 
         <p>
-            Built by <a href="https://epiforecasts.io/people/" class="text-brand-600 dark:text-brand-400 hover:underline">Sebastian Funk</a>.
+            Built by <a href="https://epiforecasts.io/people/" class="text-brand-700 dark:text-brand-400 hover:underline">Sebastian Funk</a>.
         </p>
 
         <h2 class="text-xl font-semibold text-surface-900 dark:text-white mt-10 mb-3">Contact</h2>
 
         <p>
             Questions, suggestions, or bug reports?
-            <a href="https://github.com/sbfnk/preprint-match/issues" class="text-brand-600 dark:text-brand-400 hover:underline">Open an issue on GitHub</a>
-            or email <a href="mailto:preprints@epiforecasts.io" class="text-brand-600 dark:text-brand-400 hover:underline">preprints@epiforecasts.io</a>.
+            <a href="https://github.com/sbfnk/preprint-match/issues" class="text-brand-700 dark:text-brand-400 hover:underline">Open an issue on GitHub</a>
+            or email <a href="mailto:preprints@epiforecasts.io" class="text-brand-700 dark:text-brand-400 hover:underline">preprints@epiforecasts.io</a>.
         </p>
 
     </div>
