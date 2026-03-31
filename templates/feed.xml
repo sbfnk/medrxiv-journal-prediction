@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+<channel>
+    <title>Preprint Match: {{ journal_names | join(', ') }}</title>
+    <link>{{ site_url }}/feed?{{ journal_params }}{% if days %}&amp;days={{ days }}{% endif %}</link>
+    <description>Preprints matching {{ journal_names | join(', ') }} — updated daily.</description>
+    <atom:link href="{{ feed_url | e }}" rel="self" type="application/rss+xml"/>
+    <language>en</language>
+    <lastBuildDate>{{ now | default('') }}</lastBuildDate>
+    {% for paper in papers %}
+    <item>
+        <title>{{ paper.title | e }}</title>
+        <link>{{ site_url }}/paper/{{ paper.doi }}</link>
+        <guid isPermaLink="true">{{ site_url }}/paper/{{ paper.doi }}</guid>
+        <pubDate>{{ paper.date }}</pubDate>
+        <category>{{ paper.category | e }}</category>
+        <description>Best match: {{ paper.matched_journal | e }} ({{ (paper.probability * 100) | round(1) }}%). {{ paper.authors | e }}</description>
+    </item>
+    {% endfor %}
+</channel>
+</rss>

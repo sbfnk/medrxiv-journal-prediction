@@ -427,6 +427,124 @@ def paper_view(doi):
     )
 
 
+# ---------- Feed routes ----------
+
+def get_feed_rankings(journal_names, days=None, top_k=50):
+    """Compute multi-journal feed from the probability matrix.
+
+    For each paper, takes the max probability across selected journals.
+    Returns ranked papers and the list of resolved journal names.
+    """
+    journal_indices = []
+    resolved = []
+    for name in journal_names:
+        idx = DATA["journal_by_name"].get(name)
+        if idx is not None:
+            journal_indices.append(idx)
+            resolved.append(name)
+
+    if not journal_indices or DATA["proba"] is None:
+        return [], resolved
+
+    proba = DATA["proba"]
+    target_probs = proba[:, journal_indices]
+    max_probs = np.max(target_probs, axis=1)
+    best_journal_local = np.argmax(target_probs, axis=1)
+
+    # Date filter
+    if days:
+        cutoff = (datetime.now() - timedelta(days=days)).date()
+        mask = np.array([
+            d is not None and d >= cutoff
+            for d in DATA["paper_dates"]
+        ])
+    else:
+        mask = np.ones(len(DATA["papers"]), dtype=bool)
+
+    filtered = np.where(mask)[0]
+    if len(filtered) == 0:
+        return [], resolved
+
+    filtered_probs = max_probs[filtered]
+    ranked = np.argsort(filtered_probs)[::-1][:top_k]
+
+    results = []
+    for rank, pos in enumerate(ranked):
+        idx = filtered[pos]
+        p = DATA["papers"][idx]
+        prob = float(max_probs[idx])
+        best_j = resolved[int(best_journal_local[idx])]
+        results.append({
+            "rank": rank + 1,
+            "doi": p["doi"],
+            "title": p.get("title", ""),
+            "abstract": p.get("abstract", ""),
+            "category": p.get("category", ""),
+            "date": p.get("date", ""),
+            "authors": p.get("authors", ""),
+            "probability": prob,
+            "matched_journal": best_j,
+            "source": p.get("source", "medrxiv"),
+        })
+
+    return results, resolved
+
+
+@app.route("/feed")
+def feed_view():
+    """Custom feed — ranked preprints across user-selected journals."""
+    journal_names = request.args.getlist("j")
+    if not journal_names:
+        return render_template("feed_create.html", meta=DATA["meta"],
+                               journals=DATA["journals"])
+
+    days = request.args.get("days", type=int, default=30)
+    top_k = min(request.args.get("top_k", type=int, default=50), 200)
+    papers, resolved = get_feed_rankings(journal_names, days=days, top_k=top_k)
+
+    # Pre-build journal query params for URL construction in template
+    from urllib.parse import quote
+    journal_params = "&".join(f"j={quote(n)}" for n in resolved)
+
+    return render_template(
+        "feed.html",
+        papers=papers,
+        journal_names=resolved,
+        journal_params=journal_params,
+        days=days,
+        meta=DATA["meta"],
+        reviews=DATA["reviews"],
+    )
+
+
+@app.route("/feed.rss")
+def feed_rss():
+    """RSS feed for a custom journal selection."""
+    journal_names = request.args.getlist("j")
+    if not journal_names:
+        abort(400)
+
+    days = request.args.get("days", type=int, default=30)
+    top_k = min(request.args.get("top_k", type=int, default=50), 200)
+    papers, resolved = get_feed_rankings(journal_names, days=days, top_k=top_k)
+
+    from urllib.parse import quote
+    journal_params = "&amp;".join(f"j={quote(n)}" for n in resolved)
+
+    from flask import make_response
+    resp = make_response(render_template(
+        "feed.xml",
+        papers=papers,
+        journal_names=resolved,
+        journal_params=journal_params,
+        days=days,
+        feed_url=request.url,
+        site_url=request.host_url.rstrip("/"),
+    ))
+    resp.headers["Content-Type"] = "application/rss+xml; charset=utf-8"
+    return resp
+
+
 # ---------- Analytics routes ----------
 
 @app.route("/hit", methods=["POST"])
