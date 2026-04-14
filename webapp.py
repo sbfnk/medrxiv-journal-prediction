@@ -307,12 +307,15 @@ init_analytics_db()
 @app.route("/")
 def index():
     """Home page — journal search and stats."""
+    # Unique categories sorted by name
+    cats = sorted({p.get("category", "") for p in DATA["papers"]} - {""})
     return render_template(
         "index.html",
         meta=DATA["meta"],
         n_journals=len(DATA["journals"]),
         journals=DATA["journals"],
         letters=DATA["journal_letters"],
+        categories=cats,
     )
 
 
@@ -429,11 +432,12 @@ def paper_view(doi):
 
 # ---------- Feed routes ----------
 
-def get_feed_rankings(journal_names, days=None, top_k=50, keywords=None):
+def get_feed_rankings(journal_names, days=None, top_k=50, keywords=None,
+                      categories=None):
     """Compute multi-journal feed from the probability matrix.
 
     For each paper, takes the max probability across selected journals.
-    Optionally filters by keywords (all must match title or abstract).
+    Optionally filters by keywords and/or categories.
     Returns ranked papers and the list of resolved journal names.
     """
     journal_indices = []
@@ -471,6 +475,8 @@ def get_feed_rankings(journal_names, days=None, top_k=50, keywords=None):
 
     # Keyword filter: all words must appear in title or abstract
     kw_lower = [w.lower() for w in keywords] if keywords else []
+    # Category filter: paper must match one of the selected categories
+    cat_lower = {c.lower() for c in categories} if categories else set()
 
     results = []
     for pos in ranked:
@@ -478,6 +484,9 @@ def get_feed_rankings(journal_names, days=None, top_k=50, keywords=None):
             break
         idx = filtered[pos]
         p = DATA["papers"][idx]
+
+        if cat_lower and p.get("category", "").lower() not in cat_lower:
+            continue
 
         if kw_lower:
             text = (p.get("title", "") + " " + p.get("abstract", "")).lower()
@@ -514,8 +523,10 @@ def feed_view():
     top_k = min(request.args.get("top_k", type=int, default=50), 200)
     query = request.args.get("q", "").strip()
     keywords = query.split() if query else None
+    categories = request.args.getlist("cat") or None
     papers, resolved = get_feed_rankings(
-        journal_names, days=days, top_k=top_k, keywords=keywords)
+        journal_names, days=days, top_k=top_k, keywords=keywords,
+        categories=categories)
 
     # Pre-build query params for URL construction in template
     from urllib.parse import quote
@@ -544,11 +555,16 @@ def feed_rss():
     top_k = min(request.args.get("top_k", type=int, default=50), 200)
     query = request.args.get("q", "").strip()
     keywords = query.split() if query else None
+    categories = request.args.getlist("cat") or None
     papers, resolved = get_feed_rankings(
-        journal_names, days=days, top_k=top_k, keywords=keywords)
+        journal_names, days=days, top_k=top_k, keywords=keywords,
+        categories=categories)
 
     from urllib.parse import quote
     journal_params = "&amp;".join(f"j={quote(n)}" for n in resolved)
+    if categories:
+        journal_params += "&amp;" + "&amp;".join(
+            f"cat={quote(c)}" for c in categories)
     if query:
         journal_params += f"&amp;q={quote(query)}"
 
@@ -578,8 +594,10 @@ def api_feed():
     top_k = min(request.args.get("top_k", type=int, default=50), 200)
     query = request.args.get("q", "").strip()
     keywords = query.split() if query else None
+    categories = request.args.getlist("cat") or None
     papers, resolved = get_feed_rankings(
-        journal_names, days=days, top_k=top_k, keywords=keywords)
+        journal_names, days=days, top_k=top_k, keywords=keywords,
+        categories=categories)
 
     # Add review info
     for p in papers:
