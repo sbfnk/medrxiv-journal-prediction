@@ -14,7 +14,6 @@
             </div>
             <div class="flex items-center gap-4 text-xs text-surface-500 dark:text-surface-300">
                 <span class="hidden sm:inline font-mono">{{ meta.n_papers }} papers &middot; {{ meta.n_journals }} journals</span>
-                <a href="/#feed" class="hover:text-surface-900 dark:hover:text-white transition-colors">My Feed</a>
                 <a href="/about" class="hover:text-surface-900 dark:hover:text-white transition-colors">About</a>
                 <a href="https://github.com/sbfnk/preprint-match" target="_blank" rel="noopener" class="hover:text-surface-900 dark:hover:text-white transition-colors" title="Source code">
                     <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
@@ -74,9 +73,14 @@
                                focus:outline-none search-glow
                                placeholder-surface-400 dark:placeholder-surface-500"
                     >
-                    <!-- Journal dropdown -->
+                    <!-- Dropdown -->
                     <div id="feed-dropdown" class="absolute w-full mt-2 bg-white dark:bg-surface-800 rounded-2xl shadow-2xl border border-surface-200 dark:border-surface-700 overflow-hidden hidden z-50 max-h-60 overflow-y-auto"></div>
                 </div>
+                <p class="text-xs text-surface-400 dark:text-surface-500 mt-2 text-center">
+                    <span class="text-brand-500">Journals</span> filter by predicted match &middot;
+                    <span class="text-purple-500">Categories</span> filter by subject area &middot;
+                    <span class="text-amber-500">Keywords</span> search titles and abstracts (any match)
+                </p>
 
                 <!-- Feed controls (shown when journals or categories are selected) -->
                 <div id="feed-controls" class="hidden mt-4 flex flex-wrap items-center gap-3 justify-center">
@@ -185,6 +189,7 @@ let activeIndex = -1;
 let currentItems = [];
 let selectedJournals = JSON.parse(localStorage.getItem('feed_journals') || '[]');
 let selectedCategories = JSON.parse(localStorage.getItem('feed_categories') || '[]');
+let selectedKeywords = JSON.parse(localStorage.getItem('feed_keywords') || '[]');
 const allCategories = {{ categories | tojson }};
 
 function escapeHtml(s) {
@@ -257,6 +262,24 @@ function removeCategory(cat) {
     feedResultsDiv.innerHTML = '';
 }
 
+function addKeyword(kw) {
+    kw = kw.trim();
+    if (!kw || selectedKeywords.indexOf(kw) !== -1) return;
+    selectedKeywords.push(kw);
+    localStorage.setItem('feed_keywords', JSON.stringify(selectedKeywords));
+    feedSearch.value = '';
+    feedDropdown.classList.add('hidden');
+    renderChips();
+    feedSearch.focus();
+}
+
+function removeKeyword(kw) {
+    selectedKeywords = selectedKeywords.filter(k => k !== kw);
+    localStorage.setItem('feed_keywords', JSON.stringify(selectedKeywords));
+    renderChips();
+    feedResultsDiv.innerHTML = '';
+}
+
 function renderChips() {
     let html = selectedJournals.map(name =>
         `<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium bg-brand-100 dark:bg-brand-600/20 text-brand-700 dark:text-brand-300">
@@ -270,13 +293,17 @@ function renderChips() {
             <button onclick="removeCategory('${cat.replace(/'/g, "\\'")}')" class="text-purple-500 hover:text-purple-700 dark:hover:text-purple-200">&times;</button>
         </span>`
     ).join('');
+    html += selectedKeywords.map(kw =>
+        `<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium bg-amber-100 dark:bg-amber-600/20 text-amber-700 dark:text-amber-300">
+            ${escapeHtml(kw)}
+            <button onclick="removeKeyword('${kw.replace(/'/g, "\\'")}')" class="text-amber-500 hover:text-amber-700 dark:hover:text-amber-200">&times;</button>
+        </span>`
+    ).join('');
     feedChips.innerHTML = html;
-    const hasFilters = selectedJournals.length > 0 || selectedCategories.length > 0;
+    const hasFilters = selectedJournals.length > 0 || selectedCategories.length > 0 || selectedKeywords.length > 0;
     feedControls.classList.toggle('hidden', !hasFilters);
     quickLinks.classList.toggle('hidden', hasFilters);
-    feedSearch.placeholder = hasFilters
-        ? 'Add more journals, categories, or type keywords...'
-        : 'Add journals, categories, and keywords...';
+    feedSearch.placeholder = 'Add journals, categories, or keywords...';
 }
 
 // --- Find papers: journal search dropdown ---
@@ -297,6 +324,17 @@ feedSearch.addEventListener('input', function() {
             .then(r => r.json())
             .then(data => {
                 let html = '';
+
+                // Keyword option — always shown at top
+                const kwAdded = selectedKeywords.indexOf(q) !== -1;
+                html += `<button ${kwAdded ? 'disabled' : `onclick="addKeyword('${q.replace(/'/g, "\\'")}')" `}
+                    class="w-full text-left px-4 py-2.5 text-sm hover:bg-surface-100 dark:hover:bg-surface-700 transition-colors flex items-center justify-between ${kwAdded ? 'opacity-40' : ''}">
+                    <div class="flex items-center gap-2">
+                        <span class="text-xs text-amber-500 font-medium">keyword</span>
+                        <span class="font-medium text-surface-900 dark:text-surface-100">${escapeHtml(q)}</span>
+                    </div>
+                    ${kwAdded ? '<span class="text-xs text-surface-400">added</span>' : '<svg class="w-4 h-4 text-amber-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>'}
+                </button>`;
 
                 // Categories
                 if (catMatches.length > 0) {
@@ -326,7 +364,6 @@ feedSearch.addEventListener('input', function() {
                     }).join('');
                 }
 
-                if (!html) { feedDropdown.classList.add('hidden'); return; }
                 feedDropdown.innerHTML = html;
                 feedDropdown.classList.remove('hidden');
             });
@@ -334,10 +371,15 @@ feedSearch.addEventListener('input', function() {
 });
 
 feedSearch.addEventListener('keydown', function(e) {
-    if (e.key === 'Enter' && (selectedJournals.length > 0 || selectedCategories.length > 0)) {
+    if (e.key === 'Enter') {
         e.preventDefault();
-        feedDropdown.classList.add('hidden');
-        loadFeed();
+        const q = feedSearch.value.trim();
+        if (q && !feedDropdown.classList.contains('hidden')) {
+            // Add as keyword
+            addKeyword(q);
+        } else if (selectedJournals.length > 0 || selectedCategories.length > 0 || selectedKeywords.length > 0) {
+            loadFeed();
+        }
     }
     if (e.key === 'Escape') feedDropdown.classList.add('hidden');
 });
@@ -351,9 +393,8 @@ feedSearch.addEventListener('blur', () => {
 function buildFeedParams() {
     let params = selectedJournals.map(j => 'j=' + encodeURIComponent(j));
     selectedCategories.forEach(c => params.push('cat=' + encodeURIComponent(c)));
+    selectedKeywords.forEach(k => params.push('kw=' + encodeURIComponent(k)));
     params.push('days=' + document.getElementById('feed-days').value);
-    const q = feedSearch.value.trim();
-    if (q) params.push('q=' + encodeURIComponent(q));
     return params.join('&');
 }
 

@@ -433,11 +433,13 @@ def paper_view(doi):
 # ---------- Feed routes ----------
 
 def get_feed_rankings(journal_names, days=None, top_k=50, keywords=None,
-                      categories=None):
+                      categories=None, keyword_mode="or"):
     """Compute multi-journal feed from the probability matrix.
 
     For each paper, takes the max probability across selected journals.
-    Optionally filters by keywords and/or categories.
+    Optionally filters by keywords (OR: any keyword must match in title or
+    abstract; each keyword's words are AND within that keyword) and/or
+    categories.
     Returns ranked papers and the list of resolved journal names.
     """
     journal_indices = []
@@ -455,8 +457,8 @@ def get_feed_rankings(journal_names, days=None, top_k=50, keywords=None,
         target_probs = proba[:, journal_indices]
         max_probs = np.max(target_probs, axis=1)
         best_journal_local = np.argmax(target_probs, axis=1)
-    elif not categories:
-        # Need at least journals or categories
+    elif not categories and not keywords:
+        # Need at least journals, categories, or keywords
         return [], resolved
 
     # Date filter
@@ -468,6 +470,11 @@ def get_feed_rankings(journal_names, days=None, top_k=50, keywords=None,
         ])
     else:
         mask = np.ones(len(DATA["papers"]), dtype=bool)
+
+    # Restrict to papers with predictions (proba matrix rows)
+    n_scored = DATA["proba"].shape[0] if DATA["proba"] is not None else len(DATA["papers"])
+    if len(mask) > n_scored:
+        mask[n_scored:] = False
 
     filtered = np.where(mask)[0]
     if len(filtered) == 0:
@@ -484,8 +491,10 @@ def get_feed_rankings(journal_names, days=None, top_k=50, keywords=None,
                  for i in ranked]
         ranked = sorted(ranked, key=lambda i: dates[i], reverse=True)
 
-    # Keyword filter: all words must appear in title or abstract
-    kw_lower = [w.lower() for w in keywords] if keywords else []
+    # Keyword filter: OR across keywords, AND within multi-word keywords
+    # e.g. ["influenza", "RSV transmission"] matches papers containing
+    # "influenza" OR (both "RSV" AND "transmission")
+    kw_groups = [[w.lower() for w in kw.split()] for kw in keywords] if keywords else []
     # Category filter: paper must match one of the selected categories
     cat_lower = {c.lower() for c in categories} if categories else set()
 
@@ -499,9 +508,9 @@ def get_feed_rankings(journal_names, days=None, top_k=50, keywords=None,
         if cat_lower and p.get("category", "").lower() not in cat_lower:
             continue
 
-        if kw_lower:
+        if kw_groups:
             text = (p.get("title", "") + " " + p.get("abstract", "")).lower()
-            if not all(w in text for w in kw_lower):
+            if not any(all(w in text for w in group) for group in kw_groups):
                 continue
 
         if has_journals:
@@ -536,8 +545,7 @@ def feed_view():
 
     days = request.args.get("days", type=int, default=30)
     top_k = min(request.args.get("top_k", type=int, default=50), 200)
-    query = request.args.get("q", "").strip()
-    keywords = query.split() if query else None
+    keywords = request.args.getlist("kw") or None
     categories = request.args.getlist("cat") or None
     papers, resolved = get_feed_rankings(
         journal_names, days=days, top_k=top_k, keywords=keywords,
@@ -552,7 +560,7 @@ def feed_view():
         papers=papers,
         journal_names=resolved,
         journal_params=journal_params,
-        query=query,
+        keywords=keywords or [],
         days=days,
         meta=DATA["meta"],
         reviews=DATA["reviews"],
@@ -568,8 +576,7 @@ def feed_rss():
 
     days = request.args.get("days", type=int, default=30)
     top_k = min(request.args.get("top_k", type=int, default=50), 200)
-    query = request.args.get("q", "").strip()
-    keywords = query.split() if query else None
+    keywords = request.args.getlist("kw") or None
     categories = request.args.getlist("cat") or None
     papers, resolved = get_feed_rankings(
         journal_names, days=days, top_k=top_k, keywords=keywords,
@@ -580,8 +587,9 @@ def feed_rss():
     if categories:
         journal_params += "&amp;" + "&amp;".join(
             f"cat={quote(c)}" for c in categories)
-    if query:
-        journal_params += f"&amp;q={quote(query)}"
+    if keywords:
+        journal_params += "&amp;" + "&amp;".join(
+            f"kw={quote(k)}" for k in keywords)
 
     from flask import make_response
     resp = make_response(render_template(
@@ -590,7 +598,7 @@ def feed_rss():
         journal_names=resolved,
         journal_params=journal_params,
         days=days,
-        query=query,
+        keywords=keywords or [],
         feed_url=request.url,
         site_url=request.host_url.rstrip("/"),
     ))
@@ -603,13 +611,12 @@ def api_feed():
     """JSON API for feed results."""
     journal_names = request.args.getlist("j")
     categories = request.args.getlist("cat") or None
-    if not journal_names and not categories:
+    keywords = request.args.getlist("kw") or None
+    if not journal_names and not categories and not keywords:
         return jsonify({"papers": [], "journals": []})
 
     days = request.args.get("days", type=int, default=30)
     top_k = min(request.args.get("top_k", type=int, default=50), 200)
-    query = request.args.get("q", "").strip()
-    keywords = query.split() if query else None
     papers, resolved = get_feed_rankings(
         journal_names, days=days, top_k=top_k, keywords=keywords,
         categories=categories)
