@@ -35,7 +35,7 @@
     </div>
 
     <!-- Hero content -->
-    <div class="flex-1 flex flex-col items-center justify-center px-4 pb-16">
+    <div class="flex-1 flex flex-col items-center justify-center px-4 pb-8">
         <p class="text-xl font-serif text-surface-500 dark:text-surface-400 mb-8 max-w-lg mx-auto text-center">
             Matching preprints to journals
         </p>
@@ -138,7 +138,7 @@
 </div>
 
 <!-- Feed results -->
-<div id="feed-results" class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 mt-6 space-y-3"></div>
+<div id="feed-results" class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 space-y-3"></div>
 
 <!-- Stats -->
 <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-12">
@@ -260,7 +260,7 @@ function renderChips() {
     const hasJournals = selectedJournals.length > 0;
     feedControls.classList.toggle('hidden', !hasJournals);
     quickLinks.classList.toggle('hidden', hasJournals);
-    feedSearch.placeholder = hasJournals ? 'Add more journals or type keywords...' : 'Add journals and keywords...';
+    feedSearch.placeholder = hasJournals ? 'Add all journals you read, plus optional keywords...' : 'Add the journals you read, plus optional keywords...';
 }
 
 // --- Find papers: journal search dropdown ---
@@ -372,12 +372,11 @@ searchBox.addEventListener('input', function() {
             .then(data => {
                 activeIndex = -1;
                 currentItems = [];
-                // In "Find journals" tab, show papers first (primary use case)
-                // and journals as navigation links
+                // Find journals tab: only show papers
                 let html = '';
 
                 if (data.papers.length > 0) {
-                    html += '<div class="px-5 pt-3 pb-1 text-[10px] font-semibold text-surface-400 uppercase tracking-widest">Papers — click to see journal predictions</div>';
+                    html += '<div class="px-5 pt-3 pb-1 text-[10px] font-semibold text-surface-400 uppercase tracking-widest">Click a paper to see journal predictions</div>';
                     data.papers.forEach(p => {
                         const idx = currentItems.length;
                         currentItems.push({ href: `/paper/${encodeURIComponent(p.doi)}` });
@@ -395,31 +394,6 @@ searchBox.addEventListener('input', function() {
                                     ${p.authors ? '<div class="text-xs text-surface-400 dark:text-surface-500 truncate">' + escapeHtml(p.authors) + '</div>' : ''}
                                     <div class="text-xs text-surface-500 dark:text-surface-400">${p.source === 'biorxiv' ? 'bioRxiv' : 'medRxiv'} &middot; ${p.date}${p.journal ? ' &middot; <span class=&quot;text-green-600 dark:text-green-400&quot;>→ ' + escapeHtml(p.journal) + '</span>' : ''}</div>
                                 </div>
-                            </a>`;
-                    });
-                }
-
-                if (data.journals.length > 0) {
-                    html += '<div class="px-5 pt-3 pb-1 text-[10px] font-semibold text-surface-400 uppercase tracking-widest border-t border-surface-200 dark:border-surface-600">Journals</div>';
-                    data.journals.forEach(j => {
-                        const idx = currentItems.length;
-                        currentItems.push({ href: `/journal/${encodeURIComponent(j.name)}?days=30` });
-                        html += `
-                            <a href="/journal/${encodeURIComponent(j.name)}?days=30"
-                               data-idx="${idx}"
-                               class="search-item flex items-center gap-3 px-5 py-3 hover:bg-surface-100 dark:hover:bg-surface-700 transition-colors cursor-pointer">
-                                <div class="w-8 h-8 rounded-lg bg-brand-100 dark:bg-brand-600/20 flex items-center justify-center flex-shrink-0">
-                                    <svg class="w-4 h-4 text-brand-600 dark:text-brand-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/>
-                                    </svg>
-                                </div>
-                                <div class="min-w-0 flex-1">
-                                    <div class="font-medium text-surface-900 dark:text-surface-100 truncate">${highlightMatch(j.name, q)}</div>
-                                    <div class="text-xs text-surface-500 dark:text-surface-400">${j.training_papers} published papers</div>
-                                </div>
-                                <svg class="w-4 h-4 text-surface-300 dark:text-surface-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
-                                </svg>
                             </a>`;
                     });
                 }
