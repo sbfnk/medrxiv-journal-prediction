@@ -448,13 +448,16 @@ def get_feed_rankings(journal_names, days=None, top_k=50, keywords=None,
             journal_indices.append(idx)
             resolved.append(name)
 
-    if not journal_indices or DATA["proba"] is None:
-        return [], resolved
+    has_journals = len(journal_indices) > 0 and DATA["proba"] is not None
 
-    proba = DATA["proba"]
-    target_probs = proba[:, journal_indices]
-    max_probs = np.max(target_probs, axis=1)
-    best_journal_local = np.argmax(target_probs, axis=1)
+    if has_journals:
+        proba = DATA["proba"]
+        target_probs = proba[:, journal_indices]
+        max_probs = np.max(target_probs, axis=1)
+        best_journal_local = np.argmax(target_probs, axis=1)
+    elif not categories:
+        # Need at least journals or categories
+        return [], resolved
 
     # Date filter
     if days:
@@ -470,8 +473,16 @@ def get_feed_rankings(journal_names, days=None, top_k=50, keywords=None,
     if len(filtered) == 0:
         return [], resolved
 
-    filtered_probs = max_probs[filtered]
-    ranked = np.argsort(filtered_probs)[::-1]
+    if has_journals:
+        filtered_probs = max_probs[filtered]
+        ranked = np.argsort(filtered_probs)[::-1]
+    else:
+        # No journals — sort by date (newest first, already the order)
+        ranked = np.arange(len(filtered))
+        # Sort by date descending
+        dates = [DATA["paper_dates"][filtered[i]] or datetime.min.date()
+                 for i in ranked]
+        ranked = sorted(ranked, key=lambda i: dates[i], reverse=True)
 
     # Keyword filter: all words must appear in title or abstract
     kw_lower = [w.lower() for w in keywords] if keywords else []
@@ -493,8 +504,12 @@ def get_feed_rankings(journal_names, days=None, top_k=50, keywords=None,
             if not all(w in text for w in kw_lower):
                 continue
 
-        prob = float(max_probs[idx])
-        best_j = resolved[int(best_journal_local[idx])]
+        if has_journals:
+            prob = float(max_probs[idx])
+            best_j = resolved[int(best_journal_local[idx])]
+        else:
+            prob = 0.0
+            best_j = ""
         results.append({
             "rank": len(results) + 1,
             "doi": p["doi"],
@@ -587,14 +602,14 @@ def feed_rss():
 def api_feed():
     """JSON API for feed results."""
     journal_names = request.args.getlist("j")
-    if not journal_names:
+    categories = request.args.getlist("cat") or None
+    if not journal_names and not categories:
         return jsonify({"papers": [], "journals": []})
 
     days = request.args.get("days", type=int, default=30)
     top_k = min(request.args.get("top_k", type=int, default=50), 200)
     query = request.args.get("q", "").strip()
     keywords = query.split() if query else None
-    categories = request.args.getlist("cat") or None
     papers, resolved = get_feed_rankings(
         journal_names, days=days, top_k=top_k, keywords=keywords,
         categories=categories)
